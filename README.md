@@ -14,10 +14,18 @@ features (like web font and image support) added.
 This fork contains the following enhancements and fixes:
 * [feature] Add _useCredentials_ option to send authentication credentials for CORS HTTP requests to external (image, font, etc.) URIs that need (existing) authentication data sent with the HTTP request. ([#255][i255])
 * [feature] Add scale factor option for png and jpeg output. ([#69][i69], [#172][p172]) 
+* [feature] Add _yieldInterval_ and _shouldAbort_ options: cloning yields to the browser in pieces and can be aborted, instead of blocking the page for the whole clone. ([#1][f1])
+* [feature] Add _fetchTimeout_ option for loading fonts and images, instead of a fixed 30 s. ([#2][f2])
+* [performance] Loaded fonts and images are cached per URL, and inlined web font rules are resolved only once. ([#3][f3])
+* [performance] CSS custom properties (`--*`) are no longer copied into the clone; the computed values have resolved `var()` already. ([#4][f4])
 
 [i255]: https://github.com/tsayen/dom-to-image/issues/255
 [i69]: https://github.com/tsayen/dom-to-image/issues/69
 [p172]: https://github.com/tsayen/dom-to-image/pull/172
+[f1]: https://github.com/iqdoq-dfischer/dom-to-image/issues/1
+[f2]: https://github.com/iqdoq-dfischer/dom-to-image/issues/2
+[f3]: https://github.com/iqdoq-dfischer/dom-to-image/issues/3
+[f4]: https://github.com/iqdoq-dfischer/dom-to-image/issues/4
 
 ## Installation
 
@@ -163,6 +171,33 @@ Set to true to append the current time as a query string to URL requests to enab
 #### imagePlaceholder
 
 A data URL for a placeholder image that will be used when fetching an image fails. Defaults to undefined and will throw an error on failed images
+
+#### fetchTimeout
+
+Milliseconds after which loading a font or an image gives up. Defaults to 30000.
+A resource still loading for another call is shared, with the timeout of that call.
+
+#### yieldInterval
+
+Milliseconds of cloning after which the library hands control back to the browser
+(with a macrotask) before it clones the next child node, so input and rendering are
+not blocked for the whole clone. Defaults to 0, which never yields.
+
+#### shouldAbort
+
+A function called after each yield and before fonts and images are loaded. When it
+returns true, the returned promise is rejected with an `Error` whose `name` is
+`'AbortError'`.
+
+```javascript
+var aborted = false;
+domtoimage.toPng(node, {
+    yieldInterval: 16,
+    shouldAbort: function () { return aborted; }
+}).catch(function (error) {
+    if (error.name !== 'AbortError') throw error;
+});
+```
 
 ## Browsers
 
