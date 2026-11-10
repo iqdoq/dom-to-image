@@ -2,7 +2,7 @@
 
 ## Changes go through pull requests
 
-`master` accepts no direct pushes. Every change is a pull request that passes the `test` and `pr-title`
+`main` accepts no direct pushes. Every change is a pull request that passes the `test` and `pr-title`
 checks and is merged as a **squash commit**.
 
 ## The pull request title is a Conventional Commit
