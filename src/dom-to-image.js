@@ -6,6 +6,8 @@
     var fontFaces = newFontFaces();
     var images = newImages();
 
+    var DEFAULT_FETCH_TIMEOUT = 30000;
+
     // Default impl options
     var defaultOptions = {
         // Default is to fail on error, no placeholder
@@ -57,12 +59,13 @@
      *          and render, default 0 = never yield (the whole clone runs in one task).
      * @param {Function} options.shouldAbort - called after each yield and before fonts and images are loaded; when it
      *          returns true, the promise is rejected with an Error whose name is 'AbortError'.
+     * @param {Number} options.fetchTimeout - ms after which loading a font or an image gives up, default 30000.
      * @return {Promise} - A promise that is fulfilled with a SVG image data URL
      * */
     function toSvg(node, options) {
         options = options || {};
         copyOptions(options);
-        // yieldInterval and shouldAbort travel per call: impl.options is shared by concurrent renders
+        // yieldInterval, shouldAbort and fetchTimeout travel per call: impl.options is shared by concurrent renders
         var context = newRenderContext(options);
         return Promise.resolve(node)
             .then(function (node) {
@@ -70,11 +73,11 @@
             })
             .then(function (clone) {
                 checkAbort(context);
-                return embedFonts(clone);
+                return embedFonts(clone, context);
             })
             .then(function (clone) {
                 checkAbort(context);
-                return inlineImages(clone);
+                return inlineImages(clone, context);
             })
             .then(applyOptions)
             .then(function (clone) {
@@ -176,6 +179,7 @@
         return {
             yieldInterval: options.yieldInterval || 0,
             shouldAbort: options.shouldAbort || null,
+            fetchTimeout: options.fetchTimeout || DEFAULT_FETCH_TIMEOUT,
             lastYield: performance.now()
         };
     }
@@ -381,8 +385,8 @@
         }
     }
 
-    function embedFonts(node) {
-        return fontFaces.resolveAll()
+    function embedFonts(node, context) {
+        return fontFaces.resolveAll(context)
             .then(function (cssText) {
                 var styleNode = document.createElement('style');
                 node.appendChild(styleNode);
@@ -391,8 +395,8 @@
             });
     }
 
-    function inlineImages(node) {
-        return images.inlineAll(node)
+    function inlineImages(node, context) {
+        return images.inlineAll(node, context)
             .then(function () {
                 return node;
             });
@@ -537,8 +541,8 @@
             });
         }
 
-        function getAndEncode(url) {
-            var TIMEOUT = 30000;
+        function getAndEncode(url, context) {
+            var timeout = (context && context.fetchTimeout) || DEFAULT_FETCH_TIMEOUT;
             if(domtoimage.impl.options.cacheBust) {
                 // Cache bypass so we dont have CORS issues with cached images
                 // Source: https://developer.mozilla.org/en/docs/Web/API/XMLHttpRequest/Using_XMLHttpRequest#Bypassing_the_cache
@@ -549,9 +553,9 @@
                 var request = new XMLHttpRequest();
 
                 request.onreadystatechange = done;
-                request.ontimeout = timeout;
+                request.ontimeout = timedOut;
                 request.responseType = 'blob';
-                request.timeout = TIMEOUT;
+                request.timeout = timeout;
                 if(domtoimage.impl.options.useCredentials) {
                     request.withCredentials = true;
                 }
@@ -587,11 +591,11 @@
                     encoder.readAsDataURL(request.response);
                 }
 
-                function timeout() {
+                function timedOut() {
                     if(placeholder) {
                         resolve(placeholder);
                     } else {
-                        fail('timeout of ' + TIMEOUT + 'ms occured while fetching resource: ' + url);
+                        fail('timeout of ' + timeout + 'ms occured while fetching resource: ' + url);
                     }
                 }
 
@@ -739,12 +743,12 @@
             }
         };
 
-        function resolveAll() {
+        function resolveAll(context) {
             return readAll(document)
                 .then(function (webFonts) {
                     return Promise.all(
                         webFonts.map(function (webFont) {
-                            return webFont.resolve();
+                            return webFont.resolve(context);
                         })
                     );
                 })
@@ -785,9 +789,11 @@
 
             function newWebFont(webFontRule) {
                 return {
-                    resolve: function resolve() {
+                    resolve: function resolve(context) {
                         var baseUrl = (webFontRule.parentStyleSheet || {}).href;
-                        return inliner.inlineAll(webFontRule.cssText, baseUrl);
+                        return inliner.inlineAll(webFontRule.cssText, baseUrl, function (url) {
+                            return util.getAndEncode(url, context);
+                        });
                     },
                     src: function () {
                         return webFontRule.style.getPropertyValue('src');
@@ -828,27 +834,31 @@
             }
         }
 
-        function inlineAll(node) {
+        function inlineAll(node, context) {
             if (!(node instanceof Element)) return Promise.resolve(node);
 
             return inlineBackground(node)
                 .then(function () {
                     if (node instanceof HTMLImageElement)
-                        return newImage(node).inline();
+                        return newImage(node).inline(get);
                     else
                         return Promise.all(
                             util.asArray(node.childNodes).map(function (child) {
-                                return inlineAll(child);
+                                return inlineAll(child, context);
                             })
                         );
                 });
+
+            function get(url) {
+                return util.getAndEncode(url, context);
+            }
 
             function inlineBackground(node) {
                 var background = node.style.getPropertyValue('background');
 
                 if (!background) return Promise.resolve(node);
 
-                return inliner.inlineAll(background)
+                return inliner.inlineAll(background, undefined, get)
                     .then(function (inlined) {
                         node.style.setProperty(
                             'background',

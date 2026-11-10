@@ -731,6 +731,40 @@
             });
         });
 
+        describe('resource loading', function () {
+            var util = domtoimage.impl.util;
+            var originalSend = XMLHttpRequest.prototype.send;
+            var sentTimeouts;
+
+            beforeEach(function () {
+                sentTimeouts = [];
+                XMLHttpRequest.prototype.send = function () {
+                    sentTimeouts.push(this.timeout);
+                    return originalSend.apply(this, arguments);
+                };
+            });
+
+            afterEach(function () {
+                XMLHttpRequest.prototype.send = originalSend;
+            });
+
+            // a URL of its own per test, so a resource loaded by an earlier test does not count
+            function uniqueUrl(fileName) {
+                return BASE_URL + fileName + '?' + util.uid();
+            }
+
+            it('should use fetchTimeout of the call', function (done) {
+                util.getAndEncode(uniqueUrl('util/fontawesome.woff2'), { fetchTimeout: 5000 })
+                    .then(function () {
+                        return util.getAndEncode(uniqueUrl('util/fontawesome.woff2'));
+                    })
+                    .then(function () {
+                        assert.deepEqual(sentTimeouts, [5000, 30000]);
+                    })
+                    .then(done).catch(done);
+            });
+        });
+
         function loadTestPage(html, css, controlImage) {
             return loadPage()
                 .then(function () {
