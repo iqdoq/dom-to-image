@@ -610,6 +610,106 @@
             });
         });
 
+        describe('yield and abort', function () {
+            var util = domtoimage.impl.util;
+            var originalNextMacrotask = util.nextMacrotask;
+            var yieldCount;
+
+            beforeEach(function () {
+                yieldCount = 0;
+                util.nextMacrotask = function () {
+                    yieldCount++;
+                    return originalNextMacrotask();
+                };
+            });
+
+            afterEach(function () {
+                util.nextMacrotask = originalNextMacrotask;
+            });
+
+            it('should yield while cloning and produce the same svg', function (done) {
+                var svgWithoutYield;
+                loadTestPage('bigger/dom-node.html', 'bigger/style.css')
+                    .then(function () {
+                        return domtoimage.toSvg(domNode());
+                    })
+                    .then(function (svg) {
+                        svgWithoutYield = svg;
+                        assert.equal(yieldCount, 0);
+                        return domtoimage.toSvg(domNode(), { yieldInterval: 0.001 });
+                    })
+                    .then(function (svg) {
+                        assert.isAbove(yieldCount, 0);
+                        assert.equal(svg, svgWithoutYield);
+                    })
+                    .then(done).catch(done);
+            });
+
+            it('should reject with AbortError when shouldAbort returns true after a yield', function (done) {
+                var askedCount = 0;
+                loadTestPage('small/dom-node.html', 'small/style.css')
+                    .then(function () {
+                        return domtoimage.toSvg(domNode(), {
+                            yieldInterval: 0.001,
+                            shouldAbort: function () {
+                                askedCount++;
+                                return true;
+                            }
+                        });
+                    })
+                    .then(function () {
+                        assert.fail('rendering should have been aborted');
+                    }, function (error) {
+                        assert.equal(error.name, 'AbortError');
+                        assert.equal(askedCount, 1);
+                        assert.equal(yieldCount, 1);
+                    })
+                    .then(done).catch(done);
+            });
+
+            it('should check shouldAbort before loading fonts and before loading images', function (done) {
+                var askedCount = 0;
+                loadTestPage('small/dom-node.html', 'small/style.css')
+                    .then(function () {
+                        return domtoimage.toSvg(domNode(), {
+                            shouldAbort: function () {
+                                askedCount++;
+                                return askedCount === 2;
+                            }
+                        });
+                    })
+                    .then(function () {
+                        assert.fail('rendering should have been aborted');
+                    }, function (error) {
+                        assert.equal(error.name, 'AbortError');
+                        assert.equal(askedCount, 2);
+                        assert.equal(yieldCount, 0);
+                    })
+                    .then(done).catch(done);
+            });
+
+            it('should render when shouldAbort returns false', function (done) {
+                var svgWithoutOptions;
+                loadTestPage('small/dom-node.html', 'small/style.css')
+                    .then(function () {
+                        return domtoimage.toSvg(domNode());
+                    })
+                    .then(function (svg) {
+                        svgWithoutOptions = svg;
+                        return domtoimage.toSvg(domNode(), {
+                            yieldInterval: 0.001,
+                            shouldAbort: function () {
+                                return false;
+                            }
+                        });
+                    })
+                    .then(function (svg) {
+                        assert.equal(svg, svgWithoutOptions);
+                    })
+                    .then(done).catch(done);
+            });
+        });
+
         describe('custom properties', function () {
 
             it('should not copy custom properties into the clone', function (done) {

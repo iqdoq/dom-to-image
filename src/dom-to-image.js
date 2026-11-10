@@ -53,17 +53,29 @@
      * @param {String} options.imagePlaceholder - dataURL to use as a placeholder for failed images, default behaviour is to fail fast on images we can't fetch
      * @param {Boolean} options.cacheBust - set to true to cache bust by appending the time to the request url
      * @param {Boolean} options.useCredentials - set to true to send (existing) authentication credentials to external URIs (CORS requests)
+     * @param {Number} options.yieldInterval - ms of cloning after which the browser gets a macrotask to handle input
+     *          and render, default 0 = never yield (the whole clone runs in one task).
+     * @param {Function} options.shouldAbort - called after each yield and before fonts and images are loaded; when it
+     *          returns true, the promise is rejected with an Error whose name is 'AbortError'.
      * @return {Promise} - A promise that is fulfilled with a SVG image data URL
      * */
     function toSvg(node, options) {
         options = options || {};
         copyOptions(options);
+        // yieldInterval and shouldAbort travel per call: impl.options is shared by concurrent renders
+        var context = newRenderContext(options);
         return Promise.resolve(node)
             .then(function (node) {
-                return cloneNode(node, options.filter, true);
+                return cloneNode(node, options.filter, true, context);
             })
-            .then(embedFonts)
-            .then(inlineImages)
+            .then(function (clone) {
+                checkAbort(context);
+                return embedFonts(clone);
+            })
+            .then(function (clone) {
+                checkAbort(context);
+                return inlineImages(clone);
+            })
             .then(applyOptions)
             .then(function (clone) {
                 return makeSvgDataUri(clone,
@@ -160,6 +172,36 @@
         }
     }
 
+    function newRenderContext(options) {
+        return {
+            yieldInterval: options.yieldInterval || 0,
+            shouldAbort: options.shouldAbort || null,
+            lastYield: performance.now()
+        };
+    }
+
+    function checkAbort(context) {
+        if (!context.shouldAbort) return;
+        if (!context.shouldAbort()) return;
+
+        var error = new Error('dom-to-image rendering aborted');
+        error.name = 'AbortError';
+        throw error;
+    }
+
+    function yieldIfDue(context) {
+        if (!context.yieldInterval) return;
+
+        var sinceLastYield = performance.now() - context.lastYield;
+        if (sinceLastYield < context.yieldInterval) return;
+
+        return util.nextMacrotask()
+            .then(function () {
+                context.lastYield = performance.now();
+                checkAbort(context);
+            });
+    }
+
     function draw(domNode, options) {
         return toSvg(domNode, options)
             .then(util.makeImage)
@@ -195,7 +237,7 @@
         }
     }
 
-    function cloneNode(node, filter, root) {
+    function cloneNode(node, filter, root, context) {
         if (!root && filter && !filter(node)) return Promise.resolve();
 
         return Promise.resolve(node)
@@ -226,7 +268,10 @@
                 children.forEach(function (child) {
                     done = done
                         .then(function () {
-                            return cloneNode(child, filter);
+                            return yieldIfDue(context);
+                        })
+                        .then(function () {
+                            return cloneNode(child, filter, false, context);
                         })
                         .then(function (childClone) {
                             if (childClone) parent.appendChild(childClone);
@@ -384,6 +429,7 @@
             getAndEncode: getAndEncode,
             uid: uid(),
             delay: delay,
+            nextMacrotask: nextMacrotask,
             isCustomProperty: isCustomProperty,
             asArray: asArray,
             escapeXhtml: escapeXhtml,
@@ -553,6 +599,18 @@
                     console.error(message);
                     resolve('');
                 }
+            });
+        }
+
+        // A message on a fresh channel is a macrotask without the 4 ms clamp of a nested setTimeout
+        function nextMacrotask() {
+            return new Promise(function (resolve) {
+                var channel = new MessageChannel();
+                channel.port1.onmessage = function () {
+                    channel.port1.close();
+                    resolve();
+                };
+                channel.port2.postMessage(null);
             });
         }
 
