@@ -53,7 +53,7 @@ jobs:
 
       # trusted publishing (OIDC) needs npm 11.5.1 or later
       - name: Install npm
-        run: npm install -g npm@11.6.2
+        run: npm install -g npm@12.2.1
 
       - name: Check that the tag matches the package version
         run: |
