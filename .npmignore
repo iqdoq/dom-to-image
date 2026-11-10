@@ -12,3 +12,4 @@ bower_components/
 spec/
 test-lib/
 .gitattributes
+SECURITY.md
