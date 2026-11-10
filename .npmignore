@@ -11,3 +11,4 @@ karma*.js
 bower_components/
 spec/
 test-lib/
+.gitattributes

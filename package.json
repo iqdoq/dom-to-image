@@ -3,6 +3,10 @@
     "version": "2.6.0-iqdoq.3",
     "description": "Generates an image from a DOM node using HTML5 canvas and SVG",
     "main": "src/dom-to-image.js",
+    "publishConfig": {
+        "access": "public",
+        "provenance": true
+    },
     "dependencies": {},
     "devDependencies": {
         "chai": "^2.2.0",
