@@ -733,11 +733,18 @@
 
         describe('resource loading', function () {
             var util = domtoimage.impl.util;
+            var originalOpen = XMLHttpRequest.prototype.open;
             var originalSend = XMLHttpRequest.prototype.send;
+            var openedUrls;
             var sentTimeouts;
 
             beforeEach(function () {
+                openedUrls = [];
                 sentTimeouts = [];
+                XMLHttpRequest.prototype.open = function () {
+                    openedUrls.push(arguments[1]);
+                    return originalOpen.apply(this, arguments);
+                };
                 XMLHttpRequest.prototype.send = function () {
                     sentTimeouts.push(this.timeout);
                     return originalSend.apply(this, arguments);
@@ -745,13 +752,56 @@
             });
 
             afterEach(function () {
+                XMLHttpRequest.prototype.open = originalOpen;
                 XMLHttpRequest.prototype.send = originalSend;
+                domtoimage.impl.options.cacheBust = false;
             });
 
             // a URL of its own per test, so a resource loaded by an earlier test does not count
             function uniqueUrl(fileName) {
                 return BASE_URL + fileName + '?' + util.uid();
             }
+
+            it('should load a resource only once', function (done) {
+                var url = uniqueUrl('util/fontawesome.woff2');
+                Promise.all([util.getAndEncode(url), util.getAndEncode(url)])
+                    .then(function (contents) {
+                        return util.getAndEncode(url)
+                            .then(function (content) {
+                                assert.equal(openedUrls.length, 1);
+                                assert.ok(contents[0]);
+                                assert.equal(contents[1], contents[0]);
+                                assert.equal(content, contents[0]);
+                            });
+                    })
+                    .then(done).catch(done);
+            });
+
+            it('should load a failed resource again', function (done) {
+                var url = uniqueUrl('util/not-found');
+                util.getAndEncode(url)
+                    .then(function () {
+                        return util.getAndEncode(url);
+                    })
+                    .then(function (content) {
+                        assert.equal(content, '');
+                        assert.equal(openedUrls.length, 2);
+                    })
+                    .then(done).catch(done);
+            });
+
+            it('should bypass the cache with cacheBust', function (done) {
+                var url = uniqueUrl('util/fontawesome.woff2');
+                domtoimage.impl.options.cacheBust = true;
+                util.getAndEncode(url)
+                    .then(function () {
+                        return util.getAndEncode(url);
+                    })
+                    .then(function () {
+                        assert.equal(openedUrls.length, 2);
+                    })
+                    .then(done).catch(done);
+            });
 
             it('should use fetchTimeout of the call', function (done) {
                 util.getAndEncode(uniqueUrl('util/fontawesome.woff2'), { fetchTimeout: 5000 })
@@ -760,6 +810,36 @@
                     })
                     .then(function () {
                         assert.deepEqual(sentTimeouts, [5000, 30000]);
+                    })
+                    .then(done).catch(done);
+            });
+
+            it('should resolve web fonts only once', function (done) {
+                this.timeout(10000);
+                var originalGetAndEncode = util.getAndEncode;
+                var loadCount = 0;
+                var firstCssText;
+                loadTestPage('fonts/dom-node.html', 'fonts/style.css')
+                    .then(delay(1000))
+                    .then(function () {
+                        return domtoimage.impl.fontFaces.resolveAll();
+                    })
+                    .then(function (cssText) {
+                        firstCssText = cssText;
+                        util.getAndEncode = function () {
+                            loadCount++;
+                            return originalGetAndEncode.apply(null, arguments);
+                        };
+                        return domtoimage.impl.fontFaces.resolveAll();
+                    })
+                    .then(function (cssText) {
+                        util.getAndEncode = originalGetAndEncode;
+                        assert.include(firstCssText, ';base64,');
+                        assert.equal(cssText, firstCssText);
+                        assert.equal(loadCount, 0);
+                    }, function (error) {
+                        util.getAndEncode = originalGetAndEncode;
+                        throw error;
                     })
                     .then(done).catch(done);
             });

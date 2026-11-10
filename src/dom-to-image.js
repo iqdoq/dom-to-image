@@ -7,6 +7,10 @@
     var images = newImages();
 
     var DEFAULT_FETCH_TIMEOUT = 30000;
+    // base64 characters of loaded fonts and images kept across calls, about 20 MB of memory
+    var FETCH_CACHE_MAX_CHARS = 10 * 1024 * 1024;
+    var fetchCache = new Map();
+    var fetchCacheSize = 0;
 
     // Default impl options
     var defaultOptions = {
@@ -541,18 +545,92 @@
             });
         }
 
-        function getAndEncode(url, context) {
+        /**
+         * @param {String} url - absolute URL of the font or image
+         * @param {Object} context - render context of the call (fetchTimeout), may be omitted
+         * @param {Function} onFailure - called when the resource could not be loaded, may be omitted
+         * @return {Promise} - fulfilled with the base64 content, the placeholder or '' when loading failed
+         */
+        function getAndEncode(url, context, onFailure) {
             var timeout = (context && context.fetchTimeout) || DEFAULT_FETCH_TIMEOUT;
-            if(domtoimage.impl.options.cacheBust) {
+
+            return fetchCached(url, timeout)
+                .catch(function (error) {
+                    if (onFailure) onFailure();
+
+                    var placeholder = placeholderContent();
+                    if (placeholder) return placeholder;
+
+                    console.error(error.message);
+                    return '';
+                });
+        }
+
+        function placeholderContent() {
+            var imagePlaceholder = domtoimage.impl.options.imagePlaceholder;
+            if (!imagePlaceholder) return undefined;
+
+            return imagePlaceholder.split(/,/)[1];
+        }
+
+        /*
+         * One preview loads the same background image many times, and every preview the same fonts. A request
+         * still running is shared, a failed one is dropped so the next call tries again. The cache keeps at most
+         * FETCH_CACHE_MAX_CHARS of base64 content, dropping the least recently used entries first.
+         */
+        function fetchCached(url, timeout) {
+            if (domtoimage.impl.options.cacheBust) {
                 // Cache bypass so we dont have CORS issues with cached images
                 // Source: https://developer.mozilla.org/en/docs/Web/API/XMLHttpRequest/Using_XMLHttpRequest#Bypassing_the_cache
-                url += ((/\?/).test(url) ? "&" : "?") + (new Date()).getTime();
+                var bustedUrl = url + ((/\?/).test(url) ? "&" : "?") + (new Date()).getTime();
+                return fetchAndEncode(bustedUrl, timeout);
             }
 
-            return new Promise(function (resolve) {
+            var key = (domtoimage.impl.options.useCredentials ? 'credentials ' : '') + url;
+            var cached = fetchCache.get(key);
+            if (cached) {
+                // re-insert to mark it as most recently used
+                fetchCache.delete(key);
+                fetchCache.set(key, cached);
+                return cached.content;
+            }
+
+            var entry = {
+                size: 0,
+                content: null
+            };
+            entry.content = fetchAndEncode(url, timeout)
+                .then(function (content) {
+                    var stillCached = fetchCache.get(key) === entry;
+                    if (stillCached) {
+                        entry.size = content.length;
+                        fetchCacheSize += entry.size;
+                        evictFromFetchCache();
+                    }
+                    return content;
+                }, function (error) {
+                    if (fetchCache.get(key) === entry) fetchCache.delete(key);
+                    throw error;
+                });
+            fetchCache.set(key, entry);
+            return entry.content;
+        }
+
+        function evictFromFetchCache() {
+            while (fetchCacheSize > FETCH_CACHE_MAX_CHARS) {
+                var oldestKey = fetchCache.keys().next().value;
+                var oldest = fetchCache.get(oldestKey);
+                fetchCache.delete(oldestKey);
+                fetchCacheSize -= oldest.size;
+            }
+        }
+
+        function fetchAndEncode(url, timeout) {
+            return new Promise(function (resolve, reject) {
                 var request = new XMLHttpRequest();
 
                 request.onreadystatechange = done;
+                request.onerror = failed;
                 request.ontimeout = timedOut;
                 request.responseType = 'blob';
                 request.timeout = timeout;
@@ -562,24 +640,14 @@
                 request.open('GET', url, true);
                 request.send();
 
-                var placeholder;
-                if(domtoimage.impl.options.imagePlaceholder) {
-                    var split = domtoimage.impl.options.imagePlaceholder.split(/,/);
-                    if(split && split[1]) {
-                        placeholder = split[1];
-                    }
-                }
-
                 function done() {
                     if (request.readyState !== 4) return;
 
-                    if (request.status !== 200) {
-                        if(placeholder) {
-                            resolve(placeholder);
-                        } else {
-                            fail('cannot fetch resource: ' + url + ', status: ' + request.status);
-                        }
+                    // a network error and a timeout end with status 0, failed() and timedOut() report them
+                    if (request.status === 0) return;
 
+                    if (request.status !== 200) {
+                        reject(new Error('cannot fetch resource: ' + url + ', status: ' + request.status));
                         return;
                     }
 
@@ -591,17 +659,12 @@
                     encoder.readAsDataURL(request.response);
                 }
 
-                function timedOut() {
-                    if(placeholder) {
-                        resolve(placeholder);
-                    } else {
-                        fail('timeout of ' + timeout + 'ms occured while fetching resource: ' + url);
-                    }
+                function failed() {
+                    reject(new Error('cannot fetch resource: ' + url + ', status: ' + request.status));
                 }
 
-                function fail(message) {
-                    console.error(message);
-                    resolve('');
+                function timedOut() {
+                    reject(new Error('timeout of ' + timeout + 'ms occured while fetching resource: ' + url));
                 }
             });
         }
@@ -736,6 +799,9 @@
     }
 
     function newFontFaces() {
+        // inlined CSS text per font rule; the fonts of a page do not change, a stylesheet added later brings new rules
+        var resolvedRules = new Map();
+
         return {
             resolveAll: resolveAll,
             impl: {
@@ -791,9 +857,23 @@
                 return {
                     resolve: function resolve(context) {
                         var baseUrl = (webFontRule.parentStyleSheet || {}).href;
-                        return inliner.inlineAll(webFontRule.cssText, baseUrl, function (url) {
-                            return util.getAndEncode(url, context);
-                        });
+                        var key = baseUrl + '\n' + webFontRule.cssText;
+                        var cached = resolvedRules.get(key);
+                        if (cached) return cached;
+
+                        // a rule with a font that failed to load is not kept, the next call tries again
+                        var failed = false;
+                        var resolved = inliner.inlineAll(webFontRule.cssText, baseUrl, function (url) {
+                            return util.getAndEncode(url, context, function () {
+                                failed = true;
+                            });
+                        })
+                            .then(function (cssText) {
+                                if (failed) resolvedRules.delete(key);
+                                return cssText;
+                            });
+                        resolvedRules.set(key, resolved);
+                        return resolved;
                     },
                     src: function () {
                         return webFontRule.style.getPropertyValue('src');
