@@ -1,0 +1,8 @@
+# Only the actions used by the workflows. The npm devDependencies are not watched: they run only in CI and are
+# never part of the published package.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
