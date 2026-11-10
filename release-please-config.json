@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "@iqdoq/dom-to-image",
+      "changelog-path": "CHANGELOG.md",
+      "release-as": "2.7.0",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "bower.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    }
+  }
+}

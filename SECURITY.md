@@ -2,8 +2,8 @@
 
 ## Supported versions
 
-Only the latest published version of `@iqdoq/dom-to-image` receives security fixes. Fixes are released as a new
-`2.6.0-iqdoq.*` version.
+Only the latest published version of `@iqdoq/dom-to-image` receives security fixes. Versions follow
+[semantic versioning](https://semver.org/); a fix is released as a new patch version.
 
 ## Reporting a vulnerability
 

@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [master]
-    tags: ['v*']
+    branches: [main]
   pull_request:
+    # edited: re-check the title when it is changed
+    types: [opened, edited, synchronize, reopened]
 
 permissions:
   contents: read
@@ -35,16 +36,56 @@ jobs:
           diff <(tail -n +2 "$RUNNER_TEMP/committed.min.js") <(tail -n +2 dist/dom-to-image.min.js) \
             || { echo "dist/dom-to-image.min.js is outdated, run 'grunt uglify' and commit it"; exit 1; }
 
-  publish:
+  # Pull requests are squash-merged with their title as the commit message, so the title has to be a
+  # Conventional Commit: release-please derives the version and the changelog from it.
+  pr-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check that the pull request title is a Conventional Commit
+        env:
+          # passed through the environment, never interpolated into the script
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9._/-]+\))?!?: [^ ].*$'
+          if ! printf '%s' "$TITLE" | grep -Eq "$pattern"; then
+            echo "The pull request title is not a Conventional Commit: $TITLE"
+            echo "Expected '<type>[(scope)][!]: <description>', e.g. 'feat: add a timeout option' or 'fix(fonts): ...'."
+            exit 1
+          fi
+
+  release-please:
     needs: test
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      # write: create the GitHub release after publishing
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@v4
+
+  # A tag created with the workflow token starts no further workflow, so publishing runs here, right after
+  # release-please created the release. The npm trusted publisher is bound to this file (ci.yml).
+  publish:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      # write: add the npm link to the GitHub release
       contents: write
       id-token: write
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name }}
+      VERSION: ${{ needs.release-please.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
 
       - uses: actions/setup-node@v4
         with:
@@ -57,9 +98,9 @@ jobs:
 
       - name: Check that the tag matches the package version
         run: |
-          version=$(node -p "require('./package.json').version")
-          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match package version $version"
+          packageVersion=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "v$packageVersion" ]; then
+            echo "Tag $TAG does not match package version $packageVersion"
             exit 1
           fi
 
@@ -67,10 +108,11 @@ jobs:
       - name: Publish
         run: npm publish --provenance --access public --tag latest
 
-      - name: Create GitHub release
+      - name: Add the npm link to the GitHub release
         run: |
-          version=$(node -p "require('./package.json').version")
-          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --generate-notes \
-            --notes "Published to npm: [@iqdoq/dom-to-image@$version](https://www.npmjs.com/package/@iqdoq/dom-to-image/v/$version)"
+          notes=$(gh release view "$TAG" --json body --jq .body)
+          gh release edit "$TAG" --notes "Published to npm: [@iqdoq/dom-to-image@$VERSION](https://www.npmjs.com/package/@iqdoq/dom-to-image/v/$VERSION)
+
+          $notes"
         env:
           GH_TOKEN: ${{ github.token }}
