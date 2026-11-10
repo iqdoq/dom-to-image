@@ -1,6 +1,7 @@
 # DOM to Image
 
 <!-- [![Build Status](https://travis-ci.org/tsayen/dom-to-image.svg?branch=master)](https://travis-ci.org/tsayen/dom-to-image) -->
+[![npm](https://img.shields.io/npm/v/@iqdoq/dom-to-image)](https://www.npmjs.com/package/@iqdoq/dom-to-image)
 
 ## What is it
 
