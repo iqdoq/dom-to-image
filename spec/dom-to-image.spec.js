@@ -610,6 +610,27 @@
             });
         });
 
+        describe('custom properties', function () {
+
+            it('should not copy custom properties into the clone', function (done) {
+                loadTestPage('small/dom-node.html', 'small/style.css')
+                    .then(function () {
+                        $('#style').append(document.createTextNode(
+                            '#dom-node { --test-color: rgb(1, 2, 3); color: var(--test-color); }' +
+                            '#dom-node::before { content: "X"; --test-before: 1px; }'
+                        ));
+                        return domtoimage.toSvg(domNode());
+                    })
+                    .then(function (svg) {
+                        assert.notInclude(svg, '--test-color');
+                        assert.notInclude(svg, '--test-before');
+                        assert.include(svg, 'color: rgb(1, 2, 3)');
+                        assert.include(svg, 'content: "X"');
+                    })
+                    .then(done).catch(done);
+            });
+        });
+
         function loadTestPage(html, css, controlImage) {
             return loadPage()
                 .then(function () {

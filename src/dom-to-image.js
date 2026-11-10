@@ -255,8 +255,11 @@
                     if (source.cssText) target.cssText = source.cssText;
                     else copyProperties(source, target);
 
+                    // Custom properties (--*) are left out: the computed values have resolved var() already,
+                    // and an application with hundreds of them multiplies the size and time of every clone.
                     function copyProperties(source, target) {
                         util.asArray(source).forEach(function (name) {
+                            if (util.isCustomProperty(name)) return;
                             target.setProperty(
                                 name,
                                 source.getPropertyValue(name),
@@ -297,6 +300,9 @@
                         function formatCssProperties(style) {
 
                             return util.asArray(style)
+                                .filter(function (name) {
+                                    return !util.isCustomProperty(name);
+                                })
                                 .map(formatProperty)
                                 .join('; ') + ';';
 
@@ -378,6 +384,7 @@
             getAndEncode: getAndEncode,
             uid: uid(),
             delay: delay,
+            isCustomProperty: isCustomProperty,
             asArray: asArray,
             escapeXhtml: escapeXhtml,
             makeImage: makeImage,
@@ -547,6 +554,10 @@
                     resolve('');
                 }
             });
+        }
+
+        function isCustomProperty(name) {
+            return name.indexOf('--') === 0;
         }
 
         function dataAsUrl(content, type) {
