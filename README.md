@@ -22,10 +22,10 @@ This fork contains the following enhancements and fixes:
 [i255]: https://github.com/tsayen/dom-to-image/issues/255
 [i69]: https://github.com/tsayen/dom-to-image/issues/69
 [p172]: https://github.com/tsayen/dom-to-image/pull/172
-[f1]: https://github.com/iqdoq-dfischer/dom-to-image/issues/1
-[f2]: https://github.com/iqdoq-dfischer/dom-to-image/issues/2
-[f3]: https://github.com/iqdoq-dfischer/dom-to-image/issues/3
-[f4]: https://github.com/iqdoq-dfischer/dom-to-image/issues/4
+[f1]: https://github.com/iqdoq/dom-to-image/issues/1
+[f2]: https://github.com/iqdoq/dom-to-image/issues/2
+[f3]: https://github.com/iqdoq/dom-to-image/issues/3
+[f4]: https://github.com/iqdoq/dom-to-image/issues/4
 
 ## Installation
 

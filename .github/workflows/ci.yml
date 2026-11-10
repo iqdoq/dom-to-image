@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # node_modules and bower_components are committed, so nothing is installed here
+
+      - name: Lint
+        run: ./node_modules/.bin/grunt jshint
+
+      - name: Test
+        run: ./node_modules/.bin/karma start karma.ci.conf.js
+
+      - name: Check that dist/dom-to-image.min.js matches the source
+        run: |
+          cp dist/dom-to-image.min.js "$RUNNER_TEMP/committed.min.js"
+          ./node_modules/.bin/grunt uglify
+          # the first line is a banner carrying the build date
+          diff <(tail -n +2 "$RUNNER_TEMP/committed.min.js") <(tail -n +2 dist/dom-to-image.min.js) \
+            || { echo "dist/dom-to-image.min.js is outdated, run 'grunt uglify' and commit it"; exit 1; }
+
+  publish:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # trusted publishing (OIDC) needs npm 11.5.1 or later
+      - name: Install npm
+        run: npm install -g npm@11.6.2
+
+      - name: Check that the tag matches the package version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package version $version"
+            exit 1
+          fi
+
+      # Publishes through trusted publishing (OIDC). A trusted publisher can only be configured once the package
+      # exists, so the very first release uses a short-lived token in the secret NPM_TOKEN, which is deleted afterwards.
+      - name: Publish
+        run: npm publish --provenance --access public --tag latest
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
