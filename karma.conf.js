@@ -23,6 +23,7 @@ module.exports = function (config) {
             'test-lib/tesseract-1.0.10.js',
 
             'src/dom-to-image.js',
+            'spec/zz-diagnose.spec.js',
             'spec/dom-to-image.spec.js'
         ],
 
