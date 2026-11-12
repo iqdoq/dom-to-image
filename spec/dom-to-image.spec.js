@@ -534,13 +534,10 @@
 
             it('should return placeholder result if cannot get resource and placeholder is provided', function (done) {
                 var placeholder = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAMSURBVBhXY7h79y4ABTICmGnXPbMAAAAASUVORK5CYII=";
-                var original = domtoimage.impl.options.imagePlaceholder;
-                domtoimage.impl.options.imagePlaceholder = placeholder;
-                domtoimage.impl.util.getAndEncode(BASE_URL + 'util/not-found')
+                domtoimage.impl.util.getAndEncode(BASE_URL + 'util/not-found', { imagePlaceholder: placeholder })
                     .then(function (resource) {
                         var placeholderData = placeholder.split(/,/)[1];
                         assert.equal(resource, placeholderData);
-                        domtoimage.impl.options.imagePlaceholder = original;
                     }).then(done).catch(done);
             });
 
@@ -765,16 +762,19 @@
             var originalSend = XMLHttpRequest.prototype.send;
             var openedUrls;
             var sentTimeouts;
+            var sentWithCredentials;
 
             beforeEach(function () {
                 openedUrls = [];
                 sentTimeouts = [];
+                sentWithCredentials = [];
                 XMLHttpRequest.prototype.open = function () {
                     openedUrls.push(arguments[1]);
                     return originalOpen.apply(this, arguments);
                 };
                 XMLHttpRequest.prototype.send = function () {
                     sentTimeouts.push(this.timeout);
+                    sentWithCredentials.push(this.withCredentials);
                     return originalSend.apply(this, arguments);
                 };
             });
@@ -782,7 +782,6 @@
             afterEach(function () {
                 XMLHttpRequest.prototype.open = originalOpen;
                 XMLHttpRequest.prototype.send = originalSend;
-                domtoimage.impl.options.cacheBust = false;
             });
 
             // a URL of its own per test, so a resource loaded by an earlier test does not count
@@ -820,10 +819,9 @@
 
             it('should bypass the cache with cacheBust', function (done) {
                 var url = uniqueUrl('util/fontawesome.woff2');
-                domtoimage.impl.options.cacheBust = true;
-                util.getAndEncode(url)
+                util.getAndEncode(url, { cacheBust: true })
                     .then(function () {
-                        return util.getAndEncode(url);
+                        return util.getAndEncode(url, { cacheBust: true });
                     })
                     .then(function () {
                         assert.equal(openedUrls.length, 2);
@@ -838,6 +836,40 @@
                     })
                     .then(function () {
                         assert.deepEqual(sentTimeouts, [5000, 30000]);
+                    })
+                    .then(done).catch(done);
+            });
+
+            it('should send credentials only for the call that asks for them', function (done) {
+                Promise.all([
+                    util.getAndEncode(uniqueUrl('util/fontawesome.woff2'), { useCredentials: true }),
+                    util.getAndEncode(uniqueUrl('util/fontawesome.woff2'))
+                ])
+                    .then(function () {
+                        assert.deepEqual(sentWithCredentials, [true, false]);
+                    })
+                    .then(done).catch(done);
+            });
+
+            it('should keep the options of a render while another render starts', function (done) {
+                var placeholder = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAMSURBVBhXY7h79y4ABTICmGnXPbMAAAAASUVORK5CYII=';
+                loadTestPage('small/dom-node.html', 'small/style.css')
+                    .then(function () {
+                        var image = document.createElement('img');
+                        image.src = uniqueUrl('util/not-found.png');
+                        domNode().appendChild(image);
+
+                        var withPlaceholder = domtoimage.toSvg(domNode(), { imagePlaceholder: placeholder });
+                        var withoutOptions = domtoimage.toSvg(domNode(), {});
+                        return Promise.all([
+                            withPlaceholder,
+                            withoutOptions.then(function () {
+                                assert.fail('the render without a placeholder should fail on the missing image');
+                            }, function () {})
+                        ]);
+                    })
+                    .then(function (svgs) {
+                        assert.include(svgs[0], placeholder.split(/,/)[1]);
                     })
                     .then(done).catch(done);
             });
