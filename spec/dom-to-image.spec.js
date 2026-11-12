@@ -577,6 +577,127 @@
                     .then(done).catch(done);
             });
 
+            it('should embed only the fonts the clone uses', function (done) {
+                this.timeout(10000);
+                loadTestPage('fonts/dom-node.html', 'fonts/style.css')
+                    .then(function () {
+                        $('#style').append(document.createTextNode(
+                            "@font-face { font-family: 'Unused Font'; src: url(/base/spec/resources/util/fontawesome.woff2); }"
+                        ));
+                    })
+                    .then(delay(1000))
+                    .then(function () {
+                        return domtoimage.toSvg(domNode());
+                    })
+                    .then(function (svg) {
+                        // the svg is too large for an assertion message
+                        assert.isTrue(svg.indexOf('FontAwesome') !== -1, 'the used font is embedded');
+                        assert.isTrue(svg.indexOf('Unused Font') === -1, 'the unused font is not embedded');
+                    })
+                    .then(done).catch(done);
+            });
+
+            it('should record every family of a font-family list with weight and style', function () {
+                var context = { usedFonts: new Map() };
+                fontFaces.recordUse(computedStyle('"Font Awesome 6 Pro", Open  Sans, sans-serif', '900', 'oblique 10deg'), context);
+                fontFaces.recordUse(computedStyle("'Font Awesome 6 Pro'", '400', 'normal'), context);
+
+                assert.deepEqual(Array.from(context.usedFonts.keys()), ['font awesome 6 pro', 'open sans', 'sans-serif']);
+                assert.deepEqual(Array.from(context.usedFonts.get('font awesome 6 pro')), ['900 oblique', '400 normal']);
+            });
+
+            it('should read family, style and weight range of a font face', function (done) {
+                loadTestPage('fonts/web-fonts/empty.html')
+                    .then(function () {
+                        $('#style').append(document.createTextNode(
+                            "@font-face { font-family: 'Some  Font'; font-style: italic; font-weight: bold; src: url(http://fonts.com/a.woff); }" +
+                            "@font-face { font-family: Other; font-weight: 100 900; src: url(http://fonts.com/b.woff); }" +
+                            "@font-face { font-family: Third; src: url(http://fonts.com/c.woff); }"
+                        ));
+                        return fontFaces.impl.readAll();
+                    })
+                    .then(function (webFonts) {
+                        var descriptors = webFonts.map(function (webFont) {
+                            return [webFont.family(), webFont.style(), webFont.weightRange()];
+                        });
+                        assert.deepEqual(descriptors, [
+                            ['some font', 'italic', [700, 700]],
+                            ['other', 'normal', [100, 900]],
+                            ['third', 'normal', [400, 400]]
+                        ]);
+                    })
+                    .then(done).catch(done);
+            });
+
+            it('should select the nearest weight like the browser', function () {
+                var light = fakeWebFont('a', 'normal', [300, 300]);
+                var black = fakeWebFont('a', 'normal', [900, 900]);
+                var bold = fakeWebFont('a', 'normal', [700, 700]);
+
+                assert.deepEqual(select([light, black], 'a', '400 normal'), [light]);
+                assert.deepEqual(select([light, black], 'a', '600 normal'), [black]);
+                assert.deepEqual(select([light, bold, black], 'a', '200 normal'), [light]);
+                assert.deepEqual(select([light, bold, black], 'a', '800 normal'), [black]);
+            });
+
+            it('should select a variable font whose weight range contains the weight', function () {
+                var variable = fakeWebFont('a', 'normal', [100, 900]);
+                assert.deepEqual(select([variable], 'a', '650 normal'), [variable]);
+            });
+
+            it('should prefer the used style and fall back to another', function () {
+                var normal = fakeWebFont('a', 'normal', [400, 400]);
+                var italic = fakeWebFont('a', 'italic', [400, 400]);
+
+                assert.deepEqual(select([normal, italic], 'a', '400 italic'), [italic]);
+                assert.deepEqual(select([normal, italic], 'a', '400 normal'), [normal]);
+                assert.deepEqual(select([normal], 'a', '400 italic'), [normal]);
+            });
+
+            it('should keep all unicode-range parts of the chosen face', function () {
+                var latin = fakeWebFont('a', 'normal', [400, 400]);
+                var cyrillic = fakeWebFont('a', 'normal', [400, 400]);
+                var bold = fakeWebFont('a', 'normal', [700, 700]);
+
+                assert.deepEqual(select([latin, cyrillic, bold], 'a', '400 normal'), [latin, cyrillic]);
+            });
+
+            it('should drop unused families and keep faces whose weight cannot be read', function () {
+                var unused = fakeWebFont('b', 'normal', [400, 400]);
+                var unreadable = fakeWebFont('b', 'normal', undefined);
+
+                assert.deepEqual(select([unused, unreadable], 'a', '400 normal'), [unreadable]);
+            });
+
+            function select(webFonts, family, variant) {
+                var usedFonts = new Map();
+                usedFonts.set(family, new Set([variant]));
+                return fontFaces.impl.selectUsed(webFonts, usedFonts);
+            }
+
+            function fakeWebFont(family, style, weightRange) {
+                return {
+                    family: function () {
+                        return family;
+                    },
+                    style: function () {
+                        return style;
+                    },
+                    weightRange: function () {
+                        return weightRange;
+                    }
+                };
+            }
+
+            function computedStyle(family, weight, style) {
+                var values = { 'font-family': family, 'font-weight': weight, 'font-style': style };
+                return {
+                    getPropertyValue: function (name) {
+                        return values[name];
+                    }
+                };
+            }
+
             function assertSomeIncludesAll(haystacks, needles) {
                 assert(
                     haystacks.some(function (haystack) {
