@@ -632,6 +632,7 @@
         describe('yield and abort', function () {
             var util = domtoimage.impl.util;
             var originalNextMacrotask = util.nextMacrotask;
+            var originalNow = performance.now;
             var yieldCount;
 
             beforeEach(function () {
@@ -640,10 +641,18 @@
                     yieldCount++;
                     return originalNextMacrotask();
                 };
+                // Firefox coarsens performance.now(), so two calls often return the same time and a tiny
+                // yieldInterval would never be reached; a clock advancing 1 ms per call makes the tests exact
+                var now = 0;
+                performance.now = function () {
+                    now += 1;
+                    return now;
+                };
             });
 
             afterEach(function () {
                 util.nextMacrotask = originalNextMacrotask;
+                performance.now = originalNow;
             });
 
             it('should yield while cloning and produce the same svg', function (done) {
