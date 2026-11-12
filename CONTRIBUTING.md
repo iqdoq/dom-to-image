@@ -51,9 +51,11 @@ Commit.
 
 ## Running the tests
 
-`./node_modules/.bin/karma start karma.ci.conf.js` runs the suite once, as the `test` check does. On macOS,
-`./test-safari.sh` runs it in Safari, as the `test-safari` check does; Safari has no headless mode, so it opens a tab
-in the background.
+`./node_modules/.bin/karma start karma.ci.conf.js` runs the suite once, as the `test` check does.
+
+Safari is not covered by a check: on the macOS runners of GitHub its canvas does not work (`getImageData()` throws,
+`toDataURL()` returns `data:,`). Before a release, run `./test-safari.sh` on a Mac instead. Safari has no headless
+mode, so it opens a tab in the background.
 
 ## Releases
 

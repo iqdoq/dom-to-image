@@ -36,20 +36,6 @@ jobs:
           diff <(tail -n +2 "$RUNNER_TEMP/committed.min.js") <(tail -n +2 dist/dom-to-image.min.js) \
             || { echo "dist/dom-to-image.min.js is outdated, run 'grunt uglify' and commit it"; exit 1; }
 
-  # Safari exists on macOS only and has no headless mode; test-safari.sh lets Karma wait and opens Safari.
-  test-safari:
-    runs-on: macos-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Test in Safari
-        run: ./test-safari.sh
-
   # Pull requests are squash-merged with their title as the commit message, so the title has to be a
   # Conventional Commit: release-please derives the version and the changelog from it.
   pr-title:
@@ -69,7 +55,7 @@ jobs:
           fi
 
   release-please:
-    needs: [test, test-safari]
+    needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
