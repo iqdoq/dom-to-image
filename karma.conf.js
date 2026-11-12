@@ -36,11 +36,11 @@ module.exports = function (config) {
             captureConsole: true
         },
         autoWatch: true,
-        browsers: ['chrome', 'Firefox'],
+        browsers: ['chromeHeadless', 'FirefoxHeadless'],
         customLaunchers: {
-            chrome: {
+            chromeHeadless: {
                 base: 'Chrome',
-                flags: ['--no-sandbox']
+                flags: ['--headless=new', '--no-sandbox', '--disable-gpu']
             }
         },
 

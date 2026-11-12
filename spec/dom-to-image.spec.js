@@ -9,6 +9,8 @@
     var delay = domtoimage.impl.util.delay;
 
     var BASE_URL = '/base/spec/resources/';
+    // largest difference per color channel accepted between a rendered JPEG and its control image
+    var JPEG_TOLERANCE = 3;
 
     describe('domtoimage', function () {
 
@@ -49,16 +51,24 @@
                     .then(function () {
                         return domtoimage.toJpeg(domNode());
                     })
-                    .then(check)
+                    .then(checkJpeg)
                     .then(done).catch(done);
             });
 
+            // at low quality the JPEG encoders of the browsers differ too much for a control image
             it('should use quality parameter when rendering to jpeg', function (done) {
-                loadTestPage('small/dom-node.html', 'small/style.css', 'small/control-image-jpeg-low')
+                var fullQuality;
+                loadTestPage('small/dom-node.html', 'small/style.css')
                     .then(function () {
+                        return domtoimage.toJpeg(domNode());
+                    })
+                    .then(function (dataUrl) {
+                        fullQuality = dataUrl;
                         return domtoimage.toJpeg(domNode(), { quality: 0.5 });
                     })
-                    .then(check)
+                    .then(function (lowQuality) {
+                        assert.isBelow(lowQuality.length, fullQuality.length);
+                    })
                     .then(done).catch(done);
             });
 
@@ -375,6 +385,15 @@
                     .then(compareToControlImage);
             }
 
+            // JPEG encoders round differently: Safari's output differs from the control images by a few levels
+            function checkJpeg(dataUrl) {
+                return Promise.resolve(dataUrl)
+                    .then(drawDataUrl)
+                    .then(function (image) {
+                        compareToControlImage(image, JPEG_TOLERANCE);
+                    });
+            }
+
             function drawDataUrl(dataUrl, dimensions) {
                 return Promise.resolve(dataUrl)
                     .then(makeImgElement)
@@ -610,6 +629,7 @@
         describe('yield and abort', function () {
             var util = domtoimage.impl.util;
             var originalNextMacrotask = util.nextMacrotask;
+            var originalNow = performance.now;
             var yieldCount;
 
             beforeEach(function () {
@@ -618,10 +638,18 @@
                     yieldCount++;
                     return originalNextMacrotask();
                 };
+                // Firefox coarsens performance.now(), so two calls often return the same time and a tiny
+                // yieldInterval would never be reached; a clock advancing 1 ms per call makes the tests exact
+                var now = 0;
+                performance.now = function () {
+                    now += 1;
+                    return now;
+                };
             });
 
             afterEach(function () {
                 util.nextMacrotask = originalNextMacrotask;
+                performance.now = originalNow;
             });
 
             it('should yield while cloning and produce the same svg', function (done) {
