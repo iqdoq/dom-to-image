@@ -12,16 +12,6 @@
     var fetchCache = new Map();
     var fetchCacheSize = 0;
 
-    // Default impl options
-    var defaultOptions = {
-        // Default is to fail on error, no placeholder
-        imagePlaceholder: undefined,
-        // Default cache bust is false, it will use the cache
-        cacheBust: false,
-        // Use (existing) authentication credentials for external URIs (CORS requests)
-        useCredentials: false
-    };
-
     var domtoimage = {
         toSvg: toSvg,
         toPng: toPng,
@@ -32,8 +22,7 @@
             fontFaces: fontFaces,
             images: images,
             util: util,
-            inliner: inliner,
-            options: {}
+            inliner: inliner
         }
     };
 
@@ -68,8 +57,7 @@
      * */
     function toSvg(node, options) {
         options = options || {};
-        copyOptions(options);
-        // yieldInterval, shouldAbort and fetchTimeout travel per call: impl.options is shared by concurrent renders
+        // the options travel per call in the context: renders yield to the browser and may overlap
         var context = newRenderContext(options);
         return Promise.resolve(node)
             .then(function (node) {
@@ -158,29 +146,12 @@
             .then(util.canvasToBlob);
     }
 
-    function copyOptions(options) {
-        // Copy options to impl options for use in impl
-        if(typeof(options.imagePlaceholder) === 'undefined') {
-            domtoimage.impl.options.imagePlaceholder = defaultOptions.imagePlaceholder;
-        } else {
-            domtoimage.impl.options.imagePlaceholder = options.imagePlaceholder;
-        }
-
-        if(typeof(options.cacheBust) === 'undefined') {
-            domtoimage.impl.options.cacheBust = defaultOptions.cacheBust;
-        } else {
-            domtoimage.impl.options.cacheBust = options.cacheBust;
-        }
-
-        if(typeof(options.useCredentials) === 'undefined') {
-            domtoimage.impl.options.useCredentials = defaultOptions.useCredentials;
-        } else {
-            domtoimage.impl.options.useCredentials = options.useCredentials;
-        }
-    }
-
     function newRenderContext(options) {
         return {
+            // without a placeholder, an image that cannot be loaded fails the render
+            imagePlaceholder: options.imagePlaceholder,
+            cacheBust: options.cacheBust || false,
+            useCredentials: options.useCredentials || false,
             yieldInterval: options.yieldInterval || 0,
             shouldAbort: options.shouldAbort || null,
             fetchTimeout: options.fetchTimeout || DEFAULT_FETCH_TIMEOUT,
@@ -212,7 +183,9 @@
 
     function draw(domNode, options) {
         return toSvg(domNode, options)
-            .then(util.makeImage)
+            .then(function (svgDataUri) {
+                return util.makeImage(svgDataUri, options.useCredentials);
+            })
             .then(util.delay(100))
             .then(function (image) {
                 var canvas = newCanvas(domNode);
@@ -531,10 +504,10 @@
             };
         }
 
-        function makeImage(uri) {
+        function makeImage(uri, useCredentials) {
             return new Promise(function (resolve, reject) {
                 var image = new Image();
-                if(domtoimage.impl.options.useCredentials) {
+                if (useCredentials) {
                     image.crossOrigin = 'use-credentials';
                 }
                 image.onload = function () {
@@ -547,18 +520,18 @@
 
         /**
          * @param {String} url - absolute URL of the font or image
-         * @param {Object} context - render context of the call (fetchTimeout), may be omitted
+         * @param {Object} context - render context of the call, may be omitted for the default options
          * @param {Function} onFailure - called when the resource could not be loaded, may be omitted
          * @return {Promise} - fulfilled with the base64 content, the placeholder or '' when loading failed
          */
         function getAndEncode(url, context, onFailure) {
-            var timeout = (context && context.fetchTimeout) || DEFAULT_FETCH_TIMEOUT;
+            context = context || newRenderContext({});
 
-            return fetchCached(url, timeout)
+            return fetchCached(url, context)
                 .catch(function (error) {
                     if (onFailure) onFailure();
 
-                    var placeholder = placeholderContent();
+                    var placeholder = placeholderContent(context.imagePlaceholder);
                     if (placeholder) return placeholder;
 
                     console.error(error.message);
@@ -566,8 +539,7 @@
                 });
         }
 
-        function placeholderContent() {
-            var imagePlaceholder = domtoimage.impl.options.imagePlaceholder;
+        function placeholderContent(imagePlaceholder) {
             if (!imagePlaceholder) return undefined;
 
             return imagePlaceholder.split(/,/)[1];
@@ -578,15 +550,15 @@
          * still running is shared, a failed one is dropped so the next call tries again. The cache keeps at most
          * FETCH_CACHE_MAX_CHARS of base64 content, dropping the least recently used entries first.
          */
-        function fetchCached(url, timeout) {
-            if (domtoimage.impl.options.cacheBust) {
+        function fetchCached(url, context) {
+            if (context.cacheBust) {
                 // Cache bypass so we dont have CORS issues with cached images
                 // Source: https://developer.mozilla.org/en/docs/Web/API/XMLHttpRequest/Using_XMLHttpRequest#Bypassing_the_cache
                 var bustedUrl = url + ((/\?/).test(url) ? "&" : "?") + (new Date()).getTime();
-                return fetchAndEncode(bustedUrl, timeout);
+                return fetchAndEncode(bustedUrl, context);
             }
 
-            var key = (domtoimage.impl.options.useCredentials ? 'credentials ' : '') + url;
+            var key = (context.useCredentials ? 'credentials ' : '') + url;
             var cached = fetchCache.get(key);
             if (cached) {
                 // re-insert to mark it as most recently used
@@ -599,7 +571,7 @@
                 size: 0,
                 content: null
             };
-            entry.content = fetchAndEncode(url, timeout)
+            entry.content = fetchAndEncode(url, context)
                 .then(function (content) {
                     var stillCached = fetchCache.get(key) === entry;
                     if (stillCached) {
@@ -625,7 +597,9 @@
             }
         }
 
-        function fetchAndEncode(url, timeout) {
+        function fetchAndEncode(url, context) {
+            var timeout = context.fetchTimeout;
+
             return new Promise(function (resolve, reject) {
                 var request = new XMLHttpRequest();
 
@@ -634,7 +608,7 @@
                 request.ontimeout = timedOut;
                 request.responseType = 'blob';
                 request.timeout = timeout;
-                if(domtoimage.impl.options.useCredentials) {
+                if (context.useCredentials) {
                     request.withCredentials = true;
                 }
                 request.open('GET', url, true);
