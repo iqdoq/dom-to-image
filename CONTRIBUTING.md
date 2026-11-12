@@ -49,6 +49,12 @@ A line that does not stand at the end is silently ignored, and the `pr-title` ch
 whole description becomes the commit message, so it should contain no other line that looks like a Conventional
 Commit.
 
+## Running the tests
+
+`./node_modules/.bin/karma start karma.ci.conf.js` runs the suite once, as the `test` check does. On macOS,
+`./test-safari.sh` runs it in Safari, as the `test-safari` check does; Safari has no headless mode, so it opens a tab
+in the background.
+
 ## Releases
 
 [release-please](https://github.com/googleapis/release-please) keeps a release pull request open that raises the
