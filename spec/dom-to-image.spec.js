@@ -9,6 +9,8 @@
     var delay = domtoimage.impl.util.delay;
 
     var BASE_URL = '/base/spec/resources/';
+    // largest difference per color channel accepted between a rendered JPEG and its control image
+    var JPEG_TOLERANCE = 3;
 
     describe('domtoimage', function () {
 
@@ -49,16 +51,24 @@
                     .then(function () {
                         return domtoimage.toJpeg(domNode());
                     })
-                    .then(check)
+                    .then(checkJpeg)
                     .then(done).catch(done);
             });
 
+            // at low quality the JPEG encoders of the browsers differ too much for a control image
             it('should use quality parameter when rendering to jpeg', function (done) {
-                loadTestPage('small/dom-node.html', 'small/style.css', 'small/control-image-jpeg-low')
+                var fullQuality;
+                loadTestPage('small/dom-node.html', 'small/style.css')
                     .then(function () {
+                        return domtoimage.toJpeg(domNode());
+                    })
+                    .then(function (dataUrl) {
+                        fullQuality = dataUrl;
                         return domtoimage.toJpeg(domNode(), { quality: 0.5 });
                     })
-                    .then(check)
+                    .then(function (lowQuality) {
+                        assert.isBelow(lowQuality.length, fullQuality.length);
+                    })
                     .then(done).catch(done);
             });
 
@@ -373,6 +383,15 @@
                 return Promise.resolve(dataUrl)
                     .then(drawDataUrl)
                     .then(compareToControlImage);
+            }
+
+            // JPEG encoders round differently: Safari's output differs from the control images by a few levels
+            function checkJpeg(dataUrl) {
+                return Promise.resolve(dataUrl)
+                    .then(drawDataUrl)
+                    .then(function (image) {
+                        compareToControlImage(image, JPEG_TOLERANCE);
+                    });
             }
 
             function drawDataUrl(dataUrl, dimensions) {
