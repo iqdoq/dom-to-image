@@ -155,6 +155,8 @@
             yieldInterval: options.yieldInterval || 0,
             shouldAbort: options.shouldAbort || null,
             fetchTimeout: options.fetchTimeout || DEFAULT_FETCH_TIMEOUT,
+            // font family -> weights and styles the clone uses, filled while cloning, see fontFaces.recordUse
+            usedFonts: new Map(),
             lastYield: performance.now()
         };
     }
@@ -275,7 +277,9 @@
                 });
 
             function cloneStyle() {
-                copyStyle(window.getComputedStyle(original), clone.style);
+                var computedStyle = window.getComputedStyle(original);
+                copyStyle(computedStyle, clone.style);
+                fontFaces.recordUse(computedStyle, context);
 
                 function copyStyle(source, target) {
                     if (source.cssText) target.cssText = source.cssText;
@@ -306,6 +310,9 @@
                     var content = style.getPropertyValue('content');
 
                     if (content === '' || content === 'none') return;
+
+                    // icon fonts are mostly used by pseudo-elements only
+                    fontFaces.recordUse(style, context);
 
                     var className = util.uid();
                     clone.className = clone.className + ' ' + className;
@@ -778,13 +785,23 @@
 
         return {
             resolveAll: resolveAll,
+            recordUse: recordUse,
             impl: {
-                readAll: readAll
+                readAll: readAll,
+                selectUsed: selectUsed
             }
         };
 
+        /**
+         * @param {Object} context - render context of the call; without one, every font of the page is embedded
+         * @return {Promise} - fulfilled with the inlined @font-face rules the clone needs
+         */
         function resolveAll(context) {
             return readAll(document)
+                .then(function (webFonts) {
+                    if (!context) return webFonts;
+                    return selectUsed(webFonts, context.usedFonts);
+                })
                 .then(function (webFonts) {
                     return Promise.all(
                         webFonts.map(function (webFont) {
@@ -795,6 +812,154 @@
                 .then(function (cssStrings) {
                     return cssStrings.join('\n');
                 });
+        }
+
+        /*
+         * Notes the font families of a computed style, with its weight and style, as used by the clone. Every
+         * family of the font-family list counts: which one the browser draws a character with is not known here.
+         */
+        function recordUse(computedStyle, context) {
+            var weight = parseInt(computedStyle.getPropertyValue('font-weight'), 10) || 400;
+            var style = styleKind(computedStyle.getPropertyValue('font-style'));
+            var variant = weight + ' ' + style;
+
+            parseFamilies(computedStyle.getPropertyValue('font-family')).forEach(function (family) {
+                var variants = context.usedFonts.get(family);
+                if (!variants) {
+                    variants = new Set();
+                    context.usedFonts.set(family, variants);
+                }
+                variants.add(variant);
+            });
+        }
+
+        /*
+         * Keeps the font faces the browser would choose for the used families, weights and styles, following the
+         * font matching of CSS Fonts: style first, then the nearest weight. All faces with the chosen descriptors
+         * are kept, so a font split by unicode-range stays complete. A face whose weight cannot be read is kept.
+         */
+        function selectUsed(webFonts, usedFonts) {
+            var selected = new Set();
+
+            webFonts.forEach(function (webFont) {
+                if (!webFont.weightRange()) selected.add(webFont);
+            });
+
+            usedFonts.forEach(function (variants, family) {
+                var faces = webFonts.filter(function (webFont) {
+                    return webFont.family() === family && webFont.weightRange();
+                });
+                if (faces.length === 0) return;
+
+                variants.forEach(function (variant) {
+                    var parts = variant.split(' ');
+                    var weight = parseInt(parts[0], 10);
+                    var style = parts[1];
+
+                    var facesOfStyle = matchStyle(faces, style);
+                    var range = matchWeight(facesOfStyle, weight);
+                    facesOfStyle.forEach(function (webFont) {
+                        var faceRange = webFont.weightRange();
+                        if (faceRange[0] === range[0] && faceRange[1] === range[1]) selected.add(webFont);
+                    });
+                });
+            });
+
+            return webFonts.filter(function (webFont) {
+                return selected.has(webFont);
+            });
+
+            function matchStyle(faces, style) {
+                var order = {
+                    italic: ['italic', 'oblique', 'normal'],
+                    oblique: ['oblique', 'italic', 'normal'],
+                    normal: ['normal', 'oblique', 'italic']
+                }[style];
+
+                for (var i = 0; i < order.length; i++) {
+                    var facesOfStyle = faces.filter(hasStyle(order[i]));
+                    if (facesOfStyle.length > 0) return facesOfStyle;
+                }
+                return faces;
+
+                function hasStyle(kind) {
+                    return function (webFont) {
+                        return webFont.style() === kind;
+                    };
+                }
+            }
+
+            // returns the weight range of the face to use for the desired weight
+            function matchWeight(faces, weight) {
+                var ranges = faces.map(function (webFont) {
+                    return webFont.weightRange();
+                });
+
+                var containing = ranges.filter(function (range) {
+                    return range[0] <= weight && weight <= range[1];
+                });
+                if (containing.length > 0) return containing[0];
+
+                var heavier = ranges.filter(function (range) {
+                    return range[0] > weight;
+                }).sort(function (a, b) {
+                    return a[0] - b[0];
+                });
+                var lighter = ranges.filter(function (range) {
+                    return range[1] < weight;
+                }).sort(function (a, b) {
+                    return b[1] - a[1];
+                });
+
+                if (weight >= 400 && weight <= 500) {
+                    var heavierUpTo500 = heavier.filter(function (range) {
+                        return range[0] <= 500;
+                    });
+                    if (heavierUpTo500.length > 0) return heavierUpTo500[0];
+                    if (lighter.length > 0) return lighter[0];
+                    return heavier[0];
+                }
+                if (weight < 400) return lighter[0] || heavier[0];
+                return heavier[0] || lighter[0];
+            }
+        }
+
+        function parseFamilies(fontFamily) {
+            var families = [];
+            var pattern = /"([^"]*)"|'([^']*)'|([^,]+)/g;
+            var match;
+            while ((match = pattern.exec(fontFamily)) !== null) {
+                var family = normalizeFamily(match[1] || match[2] || match[3]);
+                if (family) families.push(family);
+            }
+            return families;
+        }
+
+        function normalizeFamily(family) {
+            return family.trim().replace(/\s+/g, ' ').toLowerCase();
+        }
+
+        // 'oblique 10deg' is oblique
+        function styleKind(fontStyle) {
+            var kind = fontStyle.trim().split(/\s+/)[0];
+            if (kind === 'italic' || kind === 'oblique') return kind;
+            return 'normal';
+        }
+
+        // [min, max] of a font-weight descriptor, undefined if it cannot be read
+        function parseWeightRange(descriptor) {
+            var keywords = {
+                '': 400,
+                normal: 400,
+                bold: 700
+            };
+            var values = descriptor.trim().split(/\s+/).map(function (value) {
+                if (value in keywords) return keywords[value];
+                return Number(value);
+            });
+            if (values.length > 2 || values.some(isNaN)) return undefined;
+
+            return [values[0], values[values.length - 1]];
         }
 
         function readAll() {
@@ -851,6 +1016,15 @@
                     },
                     src: function () {
                         return webFontRule.style.getPropertyValue('src');
+                    },
+                    family: function () {
+                        return parseFamilies(webFontRule.style.getPropertyValue('font-family'))[0];
+                    },
+                    style: function () {
+                        return styleKind(webFontRule.style.getPropertyValue('font-style'));
+                    },
+                    weightRange: function () {
+                        return parseWeightRange(webFontRule.style.getPropertyValue('font-weight'));
                     }
                 };
             }
