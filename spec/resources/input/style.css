@@ -8,6 +8,7 @@ input {
     width: 100%;
     font-family: monospace;
     font-size: 20px;
-    border: 1px solid grey;
+    /* the OCR of the test reads nothing in Safari when a frame surrounds the single line */
+    border: none;
     padding: 1em;
 }
