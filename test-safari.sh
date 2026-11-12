@@ -11,6 +11,12 @@ until curl -s -o /dev/null http://localhost:9876/; do
     kill -0 "$karma" 2>/dev/null || exit 1
     sleep 1
 done
-open -g -a Safari http://localhost:9876/
+# Locally Safari stays in the background (-g). A CI runner has no one to disturb, and a Safari window that is
+# never brought to the front there does not render, so every render test times out.
+if [ -n "$CI" ]; then
+    open -a Safari http://localhost:9876/
+else
+    open -g -a Safari http://localhost:9876/
+fi
 
 wait "$karma"
