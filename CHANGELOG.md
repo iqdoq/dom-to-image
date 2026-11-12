@@ -12,7 +12,3 @@
 
 * **fonts:** embed only the fonts the clone uses ([#18](https://github.com/iqdoq/dom-to-image/issues/18)) ([#21](https://github.com/iqdoq/dom-to-image/issues/21)) ([ea2a1fd](https://github.com/iqdoq/dom-to-image/commit/ea2a1fd96ffd3e19ebac9b548af746788f99fd27))
 
-
-### Continuous Integration
-
-* tag releases as v&lt;version&gt; and force the release 2.7.0 ([#15](https://github.com/iqdoq/dom-to-image/issues/15)) ([38ea0ff](https://github.com/iqdoq/dom-to-image/commit/38ea0ff69bbc5a328215b6a1e9bc47c935799261))
