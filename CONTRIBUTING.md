@@ -60,7 +60,7 @@ mode, so it opens a tab in the background.
 ## Releases
 
 [release-please](https://github.com/googleapis/release-please) keeps a release pull request open that raises the
-version in `package.json` and `bower.json` and updates `CHANGELOG.md`. Merging it creates the tag and the GitHub
+version in `package.json` and updates `CHANGELOG.md`. Merging it creates the tag and the GitHub
 release, and the workflow publishes the version to npm with provenance.
 
 If a change touches `src/dom-to-image.js`, rebuild `dist/dom-to-image.min.js` with `grunt uglify` and commit it;

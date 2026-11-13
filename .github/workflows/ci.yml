@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: 22
 
-      # node_modules and bower_components are committed, so nothing is installed here
+      # node_modules is committed, so nothing is installed here
 
       - name: Lint
         run: ./node_modules/.bin/grunt jshint

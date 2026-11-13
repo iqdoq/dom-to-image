@@ -43,11 +43,9 @@ import domtoimage from '@iqdoq/dom-to-image';
 var domtoimage = require('@iqdoq/dom-to-image');
 ```
 
-### Bower
+### Script tag
 
-`bower install dom-to-image`
-
-Include either `src/dom-to-image.js` or `dist/dom-to-image.min.js` in your page
+Include either `src/dom-to-image.js` or `dist/dom-to-image.min.js` from the npm package in your page
 and it will make the `domtoimage` variable available in the global scope.
 
 ```html
