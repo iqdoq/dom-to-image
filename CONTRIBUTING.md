@@ -51,6 +51,7 @@ Commit.
 
 ## Running the tests
 
+`npm ci` installs the development dependencies in the versions of `package-lock.json`. Then
 `./node_modules/.bin/karma start karma.ci.conf.js` runs the suite once, as the `test` check does.
 
 Safari is not covered by a check: on the macOS runners of GitHub its canvas does not work (`getImageData()` throws,

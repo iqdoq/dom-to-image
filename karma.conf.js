@@ -9,17 +9,17 @@ module.exports = function (config) {
                 included: false,
                 served: true
             }, {
-                pattern: 'test-lib/font-awesome/fonts/*.*',
+                pattern: 'node_modules/font-awesome/fonts/*.*',
                 included: false,
                 served: true
             }, {
-                pattern: 'test-lib/font-awesome/css/*.*',
+                pattern: 'node_modules/font-awesome/css/*.*',
                 included: false,
                 served: true
             },
 
-            'test-lib/jquery/jquery.js',
-            'test-lib/js-imagediff/imagediff.js',
+            'node_modules/jquery/dist/jquery.js',
+            'node_modules/imagediff/imagediff.js',
             'test-lib/tesseract-1.0.10.js',
 
             'src/dom-to-image.js',
