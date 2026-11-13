@@ -28,18 +28,22 @@ jobs:
         run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Lint
-        run: ./node_modules/.bin/grunt jshint
+        run: npm run lint
 
       - name: Test
         run: npm test
 
+      # the release build of applications loads the minified file
+      - name: Test the minified file
+        run: DIST=1 npm test
+
       - name: Check that dist/dom-to-image.min.js matches the source
         run: |
           cp dist/dom-to-image.min.js "$RUNNER_TEMP/committed.min.js"
-          ./node_modules/.bin/grunt uglify
+          npm run build
           # the first line is a banner carrying the build date
           diff <(tail -n +2 "$RUNNER_TEMP/committed.min.js") <(tail -n +2 dist/dom-to-image.min.js) \
-            || { echo "dist/dom-to-image.min.js is outdated, run 'grunt uglify' and commit it"; exit 1; }
+            || { echo "dist/dom-to-image.min.js is outdated, run 'npm run build' and commit it"; exit 1; }
 
   # Pull requests are squash-merged with their title as the commit message, so the title has to be a
   # Conventional Commit: release-please derives the version and the changelog from it.
