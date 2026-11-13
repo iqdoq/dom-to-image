@@ -20,15 +20,18 @@ jobs:
         with:
           node-version: 22
 
-      # exactly the versions of package-lock.json; .npmrc leaves out the optional native canvas module
+      # exactly the versions of package-lock.json
       - name: Install
         run: npm ci
+
+      - name: Install the browsers
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Lint
         run: ./node_modules/.bin/grunt jshint
 
       - name: Test
-        run: ./node_modules/.bin/karma start karma.ci.conf.js
+        run: npm test
 
       - name: Check that dist/dom-to-image.min.js matches the source
         run: |

@@ -1,16 +1,17 @@
 #!/bin/sh
-# Runs the suite once in Safari (macOS only): starts Karma, points Safari at it in the background and exits
-# with Karma's result. Safari keeps the tab open afterwards.
+# Runs the suite once in Safari (macOS only) through safaridriver. Safari must allow remote automation once:
+# Settings > Advanced > "Show features for web developers", then Developer > "Allow remote automation".
 set -e
 cd "$(dirname "$0")"
 
-./node_modules/.bin/karma start karma.safari.conf.js &
-karma=$!
+port=${SAFARIDRIVER_PORT:-4444}
+safaridriver --port "$port" &
+driver=$!
+trap 'kill "$driver" 2>/dev/null' EXIT
 
-until curl -s -o /dev/null http://localhost:9876/; do
-    kill -0 "$karma" 2>/dev/null || exit 1
+until curl -s -o /dev/null "http://127.0.0.1:$port/status"; do
+    kill -0 "$driver" 2>/dev/null || exit 1
     sleep 1
 done
-open -g -a Safari http://localhost:9876/
 
-wait "$karma"
+BROWSERS=safari SAFARIDRIVER_PORT="$port" npx wtr
