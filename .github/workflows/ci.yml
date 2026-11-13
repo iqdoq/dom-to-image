@@ -70,6 +70,8 @@ jobs:
       - uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high
+          # the default is runtime only, and every dependency of this package is a development dependency
+          fail-on-scopes: runtime, development
 
   release-please:
     needs: test
