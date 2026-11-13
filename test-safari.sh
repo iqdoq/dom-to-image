@@ -4,6 +4,15 @@
 set -e
 cd "$(dirname "$0")"
 
+# Suspended: since Safari 27, safaridriver cannot create a session ("The session timed out while connecting to a
+# Safari instance"), also with remote automation allowed and Safari running; others report the same
+# (https://groups.google.com/g/selenium-users/c/ril0bvxPDg4). Until Safari fixes it, WebKit in `npm test` is the
+# closest check. SAFARI_WEBDRIVER=1 runs it anyway, to try whether a newer Safari works again.
+if [ "$SAFARI_WEBDRIVER" != "1" ]; then
+    echo "The Safari run is suspended: safaridriver cannot connect to Safari 27. See test-safari.sh."
+    exit 0
+fi
+
 port=${SAFARIDRIVER_PORT:-4444}
 safaridriver --port "$port" &
 driver=$!

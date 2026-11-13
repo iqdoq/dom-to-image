@@ -56,9 +56,10 @@ Commit.
 Chromium, Firefox and WebKit, as the `test` check does; `BROWSERS=webkit npm test` limits it to some of them, and
 `npm test -- --watch` runs it again on every change.
 
-WebKit is not Safari. Before a release, also run `npm run test:safari` on a Mac: it drives Safari through
-`safaridriver`. Safari has to allow remote automation once (Settings > Advanced > "Show features for web
-developers", then Developer > "Allow remote automation").
+WebKit is not Safari. `npm run test:safari` drives Safari on a Mac through `safaridriver`; Safari has to allow
+remote automation once (Settings > Advanced > "Show features for web developers", then Developer > "Allow remote
+automation"). The run is suspended for now, since `safaridriver` cannot connect to Safari 27; `test-safari.sh`
+explains why, and `SAFARI_WEBDRIVER=1 npm run test:safari` tries it anyway.
 
 ## Releases
 
