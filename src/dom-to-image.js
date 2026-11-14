@@ -5,6 +5,7 @@
     var inliner = newInliner();
     var fontFaces = newFontFaces();
     var images = newImages();
+    var defaultStyles = newDefaultStyles();
 
     var DEFAULT_FETCH_TIMEOUT = 30000;
     // base64 characters of loaded fonts and images kept across calls, about 20 MB of memory
@@ -21,6 +22,7 @@
         impl: {
             fontFaces: fontFaces,
             images: images,
+            defaultStyles: defaultStyles,
             util: util,
             inliner: inliner
         }
@@ -287,16 +289,29 @@
 
                     // Custom properties (--*) are left out: the computed values have resolved var() already,
                     // and an application with hundreds of them multiplies the size and time of every clone.
+                    // Below the root, a property the clone gets anyway is left out as well, see defaultStyles.
                     function copyProperties(source, target) {
+                        var redundant = redundancyCheck();
+
                         util.asArray(source).forEach(function (name) {
                             if (util.isCustomProperty(name)) return;
-                            target.setProperty(
-                                name,
-                                source.getPropertyValue(name),
-                                source.getPropertyPriority(name)
-                            );
+
+                            var value = source.getPropertyValue(name);
+                            if (redundant(name, value)) return;
+
+                            target.setProperty(name, value, source.getPropertyPriority(name));
                         });
                     }
+                }
+
+                // the root takes every property: in the image it has no parent to inherit from
+                function redundancyCheck() {
+                    var parent = original.parentElement;
+                    if (root || !parent) return function () {
+                        return false;
+                    };
+
+                    return defaultStyles.redundancyCheck(original, null, window.getComputedStyle(parent));
                 }
             }
 
@@ -330,11 +345,16 @@
                             return style.cssText + ' content: ' + content + ';';
                         }
 
+                        // a pseudo-element inherits from its element, so the element's style is the parent's
                         function formatCssProperties(style) {
+                            var redundant = defaultStyles.redundancyCheck(original, element,
+                                window.getComputedStyle(original));
 
                             return util.asArray(style)
                                 .filter(function (name) {
-                                    return !util.isCustomProperty(name);
+                                    if (util.isCustomProperty(name)) return false;
+                                    if (name === 'content') return true;
+                                    return !redundant(name, style.getPropertyValue(name));
                                 })
                                 .map(formatProperty)
                                 .join('; ') + ';';
@@ -1031,6 +1051,101 @@
         }
     }
 
+    /*
+     * The computed style of an element lists every CSS property, about 300 to 500 of them, while only a few differ
+     * from what the element gets anyway. Copying them all makes the SVG several MB per preview, and serializing,
+     * parsing and rasterizing it grows with that. A property is left out of the clone when its value is the
+     * element's default, read in an empty sandbox document from an element of the same tag and the same
+     * attributes the UA style sheet selects on, and also the parent's value. Requiring both covers inherited
+     * properties, whose default would otherwise hide a different value of the parent, without a list of them.
+     */
+    function newDefaultStyles() {
+        // attributes the UA style sheet selects on, e.g. a[href], input[type], [hidden], [dir]
+        var UA_ATTRIBUTES = ['type', 'href', 'hidden', 'dir', 'open', 'multiple', 'size', 'disabled', 'controls',
+            'checked', 'selected', 'readonly'];
+        // properties the UA style sheet sets by context rather than by tag: nested lists lose their margins and
+        // change their marker, a heading in a section gets smaller, table cells take vertical-align from the row
+        var ALWAYS_COPIED = new Set(['font-size', 'list-style-type', 'vertical-align',
+            'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+            'margin-block-start', 'margin-block-end', 'margin-inline-start', 'margin-inline-end']);
+
+        var sandbox = null;
+        // key of tag, attributes and pseudo-element -> Map of property name to default value
+        var defaults = new Map();
+
+        return {
+            redundancyCheck: redundancyCheck,
+            impl: {
+                defaultsOf: defaultsOf
+            }
+        };
+
+        /**
+         * @param {Element} element - the original element
+         * @param {String} pseudo - ':before', ':after' or null for the element itself
+         * @param {CSSStyleDeclaration} parentStyle - computed style of what the clone inherits from
+         * @return {Function} - (name, value) => true when the clone gets the value without copying it
+         */
+        function redundancyCheck(element, pseudo, parentStyle) {
+            var elementDefaults = defaultsOf(element, pseudo);
+
+            return function (name, value) {
+                if (ALWAYS_COPIED.has(name)) return false;
+                if (elementDefaults.get(name) !== value) return false;
+                return parentStyle.getPropertyValue(name) === value;
+            };
+        }
+
+        function defaultsOf(element, pseudo) {
+            var key = keyOf(element, pseudo);
+            var known = defaults.get(key);
+            if (known) return known;
+
+            var sandboxDocument = sandboxDocumentOf();
+            var probe = sandboxDocument.createElementNS(element.namespaceURI, element.localName);
+            UA_ATTRIBUTES.forEach(function (name) {
+                if (element.hasAttribute(name)) probe.setAttribute(name, element.getAttribute(name));
+            });
+            sandboxDocument.body.appendChild(probe);
+
+            var style = sandboxDocument.defaultView.getComputedStyle(probe, pseudo);
+            var values = new Map();
+            util.asArray(style).forEach(function (name) {
+                values.set(name, style.getPropertyValue(name));
+            });
+            probe.remove();
+
+            defaults.set(key, values);
+            return values;
+        }
+
+        function keyOf(element, pseudo) {
+            var key = element.namespaceURI + ' ' + element.localName + ' ' + (pseudo || '');
+            UA_ATTRIBUTES.forEach(function (name) {
+                if (element.hasAttribute(name)) key += ' ' + name + '=' + element.getAttribute(name);
+            });
+            return key;
+        }
+
+        // a hidden iframe in standards mode, like the XHTML of the SVG; created again if the page removed it
+        function sandboxDocumentOf() {
+            if (sandbox && sandbox.isConnected) return sandbox.contentDocument;
+
+            sandbox = document.createElement('iframe');
+            sandbox.setAttribute('aria-hidden', 'true');
+            sandbox.tabIndex = -1;
+            sandbox.style.cssText = 'position: absolute; left: -10000px; top: 0; width: 0; height: 0; ' +
+                'border: 0; visibility: hidden;';
+            document.body.appendChild(sandbox);
+
+            var sandboxDocument = sandbox.contentDocument;
+            sandboxDocument.open();
+            sandboxDocument.write('<!DOCTYPE html><html><head></head><body></body></html>');
+            sandboxDocument.close();
+            return sandboxDocument;
+        }
+    }
+
     function newImages() {
         return {
             inlineAll: inlineAll,
@@ -1081,17 +1196,19 @@
                 return util.getAndEncode(url, context);
             }
 
+            // the longhand: the shorthand reads empty unless the clone has every background property, and it
+            // leaves out those equal to the default
             function inlineBackground(node) {
-                var background = node.style.getPropertyValue('background');
+                var background = node.style.getPropertyValue('background-image');
 
                 if (!background) return Promise.resolve(node);
 
                 return inliner.inlineAll(background, undefined, get)
                     .then(function (inlined) {
                         node.style.setProperty(
-                            'background',
+                            'background-image',
                             inlined,
-                            node.style.getPropertyPriority('background')
+                            node.style.getPropertyPriority('background-image')
                         );
                     })
                     .then(function () {
