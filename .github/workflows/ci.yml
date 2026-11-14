@@ -59,6 +59,20 @@ jobs:
             exit 1
           fi
 
+  # Fails when the pull request adds or raises a dependency with a known vulnerability (GitHub Advisory Database,
+  # as for Dependabot). Findings already on the base branch do not fail it; Dependabot reports those.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+          # the default is runtime only, and every dependency of this package is a development dependency
+          fail-on-scopes: runtime, development
+
   release-please:
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

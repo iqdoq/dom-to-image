@@ -2,8 +2,9 @@
 
 ## Changes go through pull requests
 
-`main` accepts no direct pushes. Every change is a pull request that passes the `test` and `pr-title`
-checks and is merged as a **squash commit**.
+`main` accepts no direct pushes. Every change is a pull request that passes the `test`, `pr-title` and
+`dependency-review` checks and is merged as a **squash commit**. `dependency-review` fails when the pull request adds
+or raises a dependency with a known vulnerability of severity high or above.
 
 ## The pull request title is a Conventional Commit
 
