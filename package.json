@@ -17,7 +17,7 @@
         "font-awesome": "4.4.0",
         "globals": "^17.14.0",
         "imagediff": "2.0.0",
-        "jquery": "2.1.4",
+        "jquery": "3.5.0",
         "terser": "^5.51.2"
     },
     "scripts": {
