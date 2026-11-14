@@ -51,12 +51,15 @@ Commit.
 
 ## Running the tests
 
-`npm ci` installs the development dependencies in the versions of `package-lock.json`. Then
-`./node_modules/.bin/karma start karma.ci.conf.js` runs the suite once, as the `test` check does.
+`npm ci` installs the development dependencies in the versions of `package-lock.json`, and
+`npx playwright install chromium firefox webkit` the browsers. Then `npm test` runs the suite once in headless
+Chromium, Firefox and WebKit, as the `test` check does; `BROWSERS=webkit npm test` limits it to some of them, and
+`npm test -- --watch` runs it again on every change.
 
-Safari is not covered by a check: on the macOS runners of GitHub its canvas does not work (`getImageData()` throws,
-`toDataURL()` returns `data:,`). Before a release, run `./test-safari.sh` on a Mac instead. Safari has no headless
-mode, so it opens a tab in the background.
+WebKit is not Safari. `npm run test:safari` drives Safari on a Mac through `safaridriver`; Safari has to allow
+remote automation once (Settings > Advanced > "Show features for web developers", then Developer > "Allow remote
+automation"). The run is suspended for now, since `safaridriver` cannot connect to Safari 27; `test-safari.sh`
+explains why, and `SAFARI_WEBDRIVER=1 npm run test:safari` tries it anyway.
 
 ## Releases
 

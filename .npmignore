@@ -5,7 +5,7 @@
 *.tgz
 *.yml
 Gruntfile.js
-karma*.js
+web-test-runner.config.mjs
 .idea/
 spec/
 test-lib/

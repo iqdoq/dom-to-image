@@ -47,6 +47,10 @@
             });
 
             it('should render to jpeg', function (done) {
+                // WebKit on Linux subsamples the chroma even at quality 1.0, which blurs every color edge far
+                // beyond JPEG_TOLERANCE; the other browsers stay within a few levels at 1.0
+                if (isWebKitOnLinux()) this.skip();
+
                 loadTestPage('small/dom-node.html', 'small/style.css', 'small/control-image-jpeg')
                     .then(function () {
                         return domtoimage.toJpeg(domNode());
@@ -885,11 +889,13 @@
                 defaultStyles.redundancyCheck = redundancyCheck;
             });
 
-            // the clone as before: every computed property copied
+            // the clone as before: every computed property copied, except the corner shapes. WebKit on Linux
+            // stops painting a text field natively once they are set, even to their initial value, so the
+            // reference would differ from the original instead of the reduced clone.
             function copyEveryProperty() {
                 defaultStyles.redundancyCheck = function () {
-                    return function () {
-                        return false;
+                    return function (name) {
+                        return /^corner-.*-shape$/.test(name);
                     };
                 };
             }
@@ -1119,6 +1125,13 @@
             if (root) root.remove();
         }
 
+        // Playwright's WebKit reports a macOS user agent on Linux too; only navigator.platform tells the system
+        function isWebKitOnLinux() {
+            var userAgent = navigator.userAgent;
+            var webKit = /AppleWebKit/.test(userAgent) && !/Chrome|Chromium|Edg/.test(userAgent);
+            return webKit && /Linux/.test(navigator.platform);
+        }
+
         function domNode() {
             return $('#dom-node')[0];
         }
@@ -1148,4 +1161,4 @@
             });
         }
     });
-})(this);
+})(window);
