@@ -4,11 +4,9 @@
 .stylelintrc
 *.tgz
 *.yml
-bower.json
 Gruntfile.js
 karma*.js
 .idea/
-bower_components/
 spec/
 test-lib/
 .gitattributes

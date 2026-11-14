@@ -20,7 +20,9 @@ jobs:
         with:
           node-version: 22
 
-      # node_modules and bower_components are committed, so nothing is installed here
+      # exactly the versions of package-lock.json; .npmrc leaves out the optional native canvas module
+      - name: Install
+        run: npm ci
 
       - name: Lint
         run: ./node_modules/.bin/grunt jshint

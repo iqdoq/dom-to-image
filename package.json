@@ -7,15 +7,17 @@
         "access": "public",
         "provenance": true
     },
-    "dependencies": {},
     "devDependencies": {
         "chai": "^2.2.0",
+        "font-awesome": "4.4.0",
         "grunt": "~0.4.5",
         "grunt-cli": "^1.2.0",
         "grunt-contrib-jshint": "^0.11.2",
         "grunt-contrib-uglify": "^0.9.1",
         "grunt-contrib-watch": "^0.6.1",
         "grunt-karma": "^1.0.0",
+        "imagediff": "2.0.0",
+        "jquery": "2.1.4",
         "karma": "^0.13.22",
         "karma-chai": "^0.1.0",
         "karma-chrome-launcher": "^0.1.8",

@@ -5,14 +5,7 @@
       "release-type": "node",
       "package-name": "@iqdoq/dom-to-image",
       "include-component-in-tag": false,
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        {
-          "type": "json",
-          "path": "bower.json",
-          "jsonpath": "$.version"
-        }
-      ]
+      "changelog-path": "CHANGELOG.md"
     }
   }
 }
