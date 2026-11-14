@@ -881,6 +881,65 @@
             });
         });
 
+        describe('default styles', function () {
+            var defaultStyles = domtoimage.impl.defaultStyles;
+            var redundancyCheck = defaultStyles.redundancyCheck;
+
+            afterEach(function () {
+                defaultStyles.redundancyCheck = redundancyCheck;
+            });
+
+            // the clone as before: every computed property copied, except the corner shapes. WebKit on Linux
+            // stops painting a text field natively once they are set, even to their initial value, so the
+            // reference would differ from the original instead of the reduced clone.
+            function copyEveryProperty() {
+                defaultStyles.redundancyCheck = function () {
+                    return function (name) {
+                        return /^corner-.*-shape$/.test(name);
+                    };
+                };
+            }
+
+            it('should render the same as a clone with every property', function (done) {
+                var reduced;
+                loadTestPage('default-styles/dom-node.html', 'default-styles/style.css')
+                    .then(function () {
+                        return domtoimage.toPixelData(domNode());
+                    })
+                    .then(function (pixels) {
+                        reduced = pixels;
+                        copyEveryProperty();
+                        return domtoimage.toPixelData(domNode());
+                    })
+                    .then(function (complete) {
+                        assert.equal(reduced.length, complete.length);
+                        var differing = 0;
+                        for (var i = 0; i < complete.length; i++) {
+                            if (reduced[i] !== complete[i]) differing++;
+                        }
+                        assert.equal(differing, 0, 'differing color values');
+                    })
+                    .then(done).catch(done);
+            });
+
+            it('should leave out the properties the clone gets anyway', function (done) {
+                var reduced;
+                loadTestPage('default-styles/dom-node.html', 'default-styles/style.css')
+                    .then(function () {
+                        return domtoimage.toSvg(domNode());
+                    })
+                    .then(function (svg) {
+                        reduced = svg;
+                        copyEveryProperty();
+                        return domtoimage.toSvg(domNode());
+                    })
+                    .then(function (complete) {
+                        assert.isBelow(reduced.length, complete.length / 2);
+                    })
+                    .then(done).catch(done);
+            });
+        });
+
         describe('resource loading', function () {
             var util = domtoimage.impl.util;
             var originalOpen = XMLHttpRequest.prototype.open;
