@@ -469,7 +469,7 @@
         }
 
         function parseExtension(url) {
-            var match = /\.([^\.\/]*?)$/g.exec(url);
+            var match = /\.([^./]*?)$/g.exec(url);
             if (match) return match[1];
             else return '';
         }
@@ -691,7 +691,7 @@
         }
 
         function escape(string) {
-            return string.replace(/([.*+?^${}()|\[\]\/\\])/g, '\\$1');
+            return string.replace(/([.*+?^${}()|[\]/\\])/g, '\\$1');
         }
 
         function delay(ms) {

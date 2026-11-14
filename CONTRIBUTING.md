@@ -55,7 +55,7 @@ Commit.
 `npm ci` installs the development dependencies in the versions of `package-lock.json`, and
 `npx playwright install chromium firefox webkit` the browsers. Then `npm test` runs the suite once in headless
 Chromium, Firefox and WebKit, as the `test` check does; `BROWSERS=webkit npm test` limits it to some of them, and
-`npm test -- --watch` runs it again on every change.
+`npm test -- --watch` runs it again on every change. `DIST=1 npm test` tests the minified file instead of the source.
 
 WebKit is not Safari. `npm run test:safari` drives Safari on a Mac through `safaridriver`; Safari has to allow
 remote automation once (Settings > Advanced > "Show features for web developers", then Developer > "Allow remote
@@ -68,5 +68,5 @@ explains why, and `SAFARI_WEBDRIVER=1 npm run test:safari` tries it anyway.
 version in `package.json` and updates `CHANGELOG.md`. Merging it creates the tag and the GitHub
 release, and the workflow publishes the version to npm with provenance.
 
-If a change touches `src/dom-to-image.js`, rebuild `dist/dom-to-image.min.js` with `grunt uglify` and commit it;
-the `test` check fails otherwise.
+If a change touches `src/dom-to-image.js`, rebuild `dist/dom-to-image.min.js` with `npm run build` and commit it;
+the `test` check fails otherwise. `npm run lint` runs ESLint, as the check does.

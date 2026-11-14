@@ -1,12 +1,13 @@
 // Runs spec/dom-to-image.spec.js in headless Chromium, Firefox and WebKit through Playwright.
 // BROWSERS=chromium,webkit limits the run to some of them; BROWSERS=safari drives Safari through a running
-// safaridriver (see test-safari.sh).
+// safaridriver (see test-safari.sh). DIST=1 tests dist/dom-to-image.min.js instead of the source.
 import { playwrightLauncher } from '@web/test-runner-playwright';
 import { webdriverLauncher } from '@web/test-runner-webdriver';
 
 const ALL_BROWSERS = ['chromium', 'firefox', 'webkit'];
 const browserNames = process.env.BROWSERS ? process.env.BROWSERS.split(',') : ALL_BROWSERS;
 const SAFARIDRIVER_PORT = Number(process.env.SAFARIDRIVER_PORT || 4444);
+const LIBRARY = process.env.DIST === '1' ? '/dist/dom-to-image.min.js' : '/src/dom-to-image.js';
 
 function launcher(name) {
     if (name !== 'safari') return playwrightLauncher({ product: name });
@@ -39,7 +40,7 @@ export default {
     <script src="/node_modules/jquery/dist/jquery.js"></script>
     <script src="/node_modules/imagediff/imagediff.js"></script>
     <script src="/test-lib/tesseract-1.0.10.js"></script>
-    <script src="/src/dom-to-image.js"></script>
+    <script src="${LIBRARY}"></script>
     <script type="module" src="${testFramework}"></script>
 </body>
 </html>`,

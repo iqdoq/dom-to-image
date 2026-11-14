@@ -1,10 +1,10 @@
 .github/
 .jsbeautifyrc
-.jshintrc
 .stylelintrc
 *.tgz
 *.yml
-Gruntfile.js
+eslint.config.mjs
+scripts/
 web-test-runner.config.mjs
 .idea/
 spec/
