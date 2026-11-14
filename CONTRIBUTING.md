@@ -62,6 +62,18 @@ remote automation once (Settings > Advanced > "Show features for web developers"
 automation"). The run is suspended for now, since `safaridriver` cannot connect to Safari 27; `test-safari.sh`
 explains why, and `SAFARI_WEBDRIVER=1 npm run test:safari` tries it anyway.
 
+## Dependency overrides
+
+The `overrides` in `package.json` lift transitive development dependencies past known vulnerabilities that their
+parents have not picked up yet:
+
+- `basic-ftp` 6, pulled in by the browser download helpers of puppeteer and WebdriverIO;
+- `webdriverio` 10, although `@web/test-runner-webdriver` asks for 9; it is only used by `npm run test:safari`;
+- `minimatch` 11 below `readdir-glob`, which asks for 10.
+
+Drop an override once the parent requires a fixed version itself. `npm audit` still reports `deepmerge` (low,
+through `@web/dev-server`), for which no fixed version exists.
+
 ## Releases
 
 [release-please](https://github.com/googleapis/release-please) keeps a release pull request open that raises the
