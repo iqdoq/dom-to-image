@@ -18,7 +18,7 @@
         "grunt-karma": "^1.0.0",
         "imagediff": "2.0.0",
         "jquery": "2.1.4",
-        "karma": "^0.13.22",
+        "karma": "^6.4.4",
         "karma-chai": "^0.1.0",
         "karma-chrome-launcher": "^0.1.8",
         "karma-firefox-launcher": "^2.1.3",
