@@ -889,11 +889,13 @@
                 defaultStyles.redundancyCheck = redundancyCheck;
             });
 
-            // the clone as before: every computed property copied
+            // the clone as before: every computed property copied, except the corner shapes. WebKit on Linux
+            // stops painting a text field natively once they are set, even to their initial value, so the
+            // reference would differ from the original instead of the reduced clone.
             function copyEveryProperty() {
                 defaultStyles.redundancyCheck = function () {
-                    return function () {
-                        return false;
+                    return function (name) {
+                        return /^corner-.*-shape$/.test(name);
                     };
                 };
             }
