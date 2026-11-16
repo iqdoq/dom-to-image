@@ -22,3 +22,8 @@
 #dom-node .marker::before { content: "#"; color: green; margin-right: 4px; }
 /* an inline declaration with a variable from a style sheet, whose computed value is the default */
 #dom-node .var-display { --display: block; }
+/* author styles that give a form control the default colors of another context */
+#dom-node .dark-scheme { color-scheme: dark; background-color: white; color: black; }
+#dom-node .dark-scheme input { background-color: white; color: black; }
+#dom-node .enabled-look { background-color: white; color: black; }
+#dom-node .enabled-look input { background-color: white; color: black; border-color: rgb(118, 118, 118); }
