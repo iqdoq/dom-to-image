@@ -280,6 +280,9 @@
 
             function cloneStyle() {
                 var computedStyle = window.getComputedStyle(original);
+                // cloneNode() keeps the style attribute, and a property left out below would fall back to its
+                // declaration there, e.g. to a var() whose custom property the clone does not have
+                clone.removeAttribute('style');
                 copyStyle(computedStyle, clone.style);
                 fontFaces.recordUse(computedStyle, context);
 
