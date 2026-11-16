@@ -1100,15 +1100,17 @@
         }
 
         function defaultsOf(element, pseudo) {
-            var key = keyOf(element, pseudo);
+            var context = contextOf(element);
+            var key = keyOf(element, pseudo, context);
             var known = defaults.get(key);
             if (known) return known;
 
             var sandboxDocument = sandboxDocumentOf();
             var probe = sandboxDocument.createElementNS(element.namespaceURI, element.localName);
-            UA_ATTRIBUTES.forEach(function (name) {
-                if (element.hasAttribute(name)) probe.setAttribute(name, element.getAttribute(name));
+            context.attributes.forEach(function (attribute) {
+                probe.setAttribute(attribute.name, attribute.value);
             });
+            probe.style.setProperty('color-scheme', context.colorScheme);
             sandboxDocument.body.appendChild(probe);
 
             var style = sandboxDocument.defaultView.getComputedStyle(probe, pseudo);
@@ -1122,12 +1124,31 @@
             return values;
         }
 
-        function keyOf(element, pseudo) {
-            var key = element.namespaceURI + ' ' + element.localName + ' ' + (pseudo || '');
-            UA_ATTRIBUTES.forEach(function (name) {
-                if (element.hasAttribute(name)) key += ' ' + name + '=' + element.getAttribute(name);
+        function keyOf(element, pseudo, context) {
+            var key = element.namespaceURI + ' ' + element.localName + ' ' + (pseudo || '') +
+                ' color-scheme=' + context.colorScheme;
+            context.attributes.forEach(function (attribute) {
+                key += ' ' + attribute.name + '=' + attribute.value;
             });
             return key;
+        }
+
+        /*
+         * What the UA style sheet depends on besides the tag: the attributes it selects on, a disabled state that
+         * comes from an ancestor (a control in a disabled fieldset) and the color scheme, on which the defaults
+         * of form controls depend.
+         */
+        function contextOf(element) {
+            var attributes = [];
+            UA_ATTRIBUTES.forEach(function (name) {
+                if (element.hasAttribute(name)) attributes.push({ name: name, value: element.getAttribute(name) });
+            });
+
+            var disabledByAncestor = !element.hasAttribute('disabled') && element.matches(':disabled');
+            if (disabledByAncestor) attributes.push({ name: 'disabled', value: '' });
+
+            var colorScheme = window.getComputedStyle(element).getPropertyValue('color-scheme');
+            return { attributes: attributes, colorScheme: colorScheme };
         }
 
         // a hidden iframe in standards mode, like the XHTML of the SVG; created again if the page removed it
