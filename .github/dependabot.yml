@@ -1,5 +1,6 @@
 # Only the actions used by the workflows. The npm devDependencies are not watched: they run only in CI and are
 # never part of the published package.
+# The workflows pin every action to a commit SHA with its version as a comment; Dependabot raises both together.
 version: 2
 updates:
   - package-ecosystem: github-actions
