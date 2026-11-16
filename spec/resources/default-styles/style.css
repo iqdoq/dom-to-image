@@ -20,3 +20,5 @@
 #dom-node .ltr { direction: ltr; }
 #dom-node .gradient { width: 40px; height: 10px; background: linear-gradient(90deg, red, blue) no-repeat left top; }
 #dom-node .marker::before { content: "#"; color: green; margin-right: 4px; }
+/* an inline declaration with a variable from a style sheet, whose computed value is the default */
+#dom-node .var-display { --display: block; }
