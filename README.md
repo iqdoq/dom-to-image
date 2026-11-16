@@ -1,6 +1,5 @@
 # DOM to Image
 
-<!-- [![Build Status](https://travis-ci.org/tsayen/dom-to-image.svg?branch=master)](https://travis-ci.org/tsayen/dom-to-image) -->
 [![npm](https://img.shields.io/npm/v/@iqdoq/dom-to-image)](https://www.npmjs.com/package/@iqdoq/dom-to-image)
 
 ## What is it
@@ -19,6 +18,9 @@ This fork contains the following enhancements and fixes:
 * [feature] Add _fetchTimeout_ option for loading fonts and images, instead of a fixed 30 s. ([#2][f2])
 * [performance] Loaded fonts and images are cached per URL, and inlined web font rules are resolved only once. ([#3][f3])
 * [performance] CSS custom properties (`--*`) are no longer copied into the clone; the computed values have resolved `var()` already. ([#4][f4])
+* [performance] Only the web fonts the clone uses are embedded: the `@font-face` rules the browser would select for the family, weight and style of each cloned element and pseudo-element. ([#18][f18])
+* [performance] Below the root, the clone gets only the style properties that differ from what it gets anyway from the user agent style sheet and by inheritance, which makes the SVG several times smaller. ([#28][f28], [#50][f50], [#51][f51])
+* [fix] _imagePlaceholder_, _cacheBust_ and _useCredentials_ apply only to the call that passes them, so overlapping calls no longer change each other's options. `domtoimage.impl.options` is gone. ([#19][f19])
 
 [i255]: https://github.com/tsayen/dom-to-image/issues/255
 [i69]: https://github.com/tsayen/dom-to-image/issues/69
@@ -27,6 +29,11 @@ This fork contains the following enhancements and fixes:
 [f2]: https://github.com/iqdoq/dom-to-image/issues/2
 [f3]: https://github.com/iqdoq/dom-to-image/issues/3
 [f4]: https://github.com/iqdoq/dom-to-image/issues/4
+[f18]: https://github.com/iqdoq/dom-to-image/issues/18
+[f19]: https://github.com/iqdoq/dom-to-image/issues/19
+[f28]: https://github.com/iqdoq/dom-to-image/issues/28
+[f50]: https://github.com/iqdoq/dom-to-image/issues/50
+[f51]: https://github.com/iqdoq/dom-to-image/issues/51
 
 ## Installation
 
@@ -49,7 +56,7 @@ Include either `src/dom-to-image.js` or `dist/dom-to-image.min.js` from the npm 
 and it will make the `domtoimage` variable available in the global scope.
 
 ```html
-<script src="path/to/dom-to-image.min.js" />
+<script src="path/to/dom-to-image.min.js"></script>
 <script>
   domtoimage.toPng(node)
   //...
@@ -121,7 +128,7 @@ domtoimage.toPixelData(node)
     .then(function (pixels) {
         for (var y = 0; y < node.scrollHeight; ++y) {
           for (var x = 0; x < node.scrollWidth; ++x) {
-            pixelAtXYOffset = (4 * y * node.scrollHeight) + (4 * x);
+            pixelAtXYOffset = (4 * y * node.scrollWidth) + (4 * x);
             /* pixelAtXY is a Uint8Array[4] containing RGBA values of the pixel at (x, y) in the range 0..255 */
             pixelAtXY = pixels.slice(pixelAtXYOffset, pixelAtXYOffset + 4);
           }
@@ -163,13 +170,26 @@ for JavaScript names of CSS properties.
 A number between 0 and 1 indicating image quality (e.g. 0.92 => 92%) of the
 JPEG image. Defaults to 1.0 (100%)
 
+#### scale
+
+A scale factor for PNG, JPEG and pixel data output, e.g. 2 for a sharp image on a high-density display. The canvas
+is that many times larger than the node. Defaults to no scaling.
+
 #### cacheBust
 
-Set to true to append the current time as a query string to URL requests to enable cache busting. Defaults to false
+Set to true to append the current time as a query string to URL requests to enable cache busting. Such requests also
+bypass the cache of loaded fonts and images. Defaults to false
 
 #### imagePlaceholder
 
 A data URL for a placeholder image that will be used when fetching an image fails. Defaults to undefined and will throw an error on failed images
+
+#### useCredentials
+
+Set to true to send the credentials the browser holds (cookies, HTTP authentication) with the requests for fonts and
+images, also to other origins (CORS with credentials). Defaults to false.
+
+Like every option, _cacheBust_, _imagePlaceholder_ and _useCredentials_ apply only to the call that passes them.
 
 #### fetchTimeout
 
@@ -200,15 +220,11 @@ domtoimage.toPng(node, {
 
 ## Browsers
 
-It's tested on latest Chrome and Firefox (49 and 45 respectively at the time
-of writing), with Chrome performing  significantly better on big DOM trees,
-possibly due to it's more performant SVG support, and the fact that it supports
- `CSSStyleDeclaration.cssText` property.  
+The test suite runs on every pull request in current Chromium, Firefox and WebKit, and before a release also in
+Safari on macOS.
 
 _Internet Explorer is not (and will not be) supported, as it does not support
-SVG `<foreignObject>` tag_  
-
-_Safari [is not supported](https://github.com/tsayen/dom-to-image/issues/27), as it uses a stricter security model on `<foreignObject`> tag. Suggested workaround is to use `toSvg` and render on the server._`
+SVG `<foreignObject>` tag_
 
 ## Dependencies
 
@@ -221,12 +237,13 @@ Only standard lib is currently used, but make sure your browser supports:
 
 ### Tests
 
-Most importantly, tests depend on:
+The tests run in real browsers with [Web Test Runner](https://modern-web.dev/docs/test-runner/overview/);
+[CONTRIBUTING.md](CONTRIBUTING.md) explains how. Most importantly, they depend on:
 
 -   [js-imagediff](https://github.com/HumbleSoftware/js-imagediff),
     to compare rendered and control images
 
--   [ocrad.js](https://github.com/antimatter15/ocrad.js), for the
+-   [Tesseract.js](https://github.com/naptha/tesseract.js), for the
     parts when you can't compare images (due to the browser
     rendering differences) and just have to test whether the text is rendered
 
@@ -243,17 +260,26 @@ for you, following steps are taken:
 
 1.  Clone the original DOM node recursively
 
+    -   with _yieldInterval_ set, hand control back to the browser between
+        child nodes, and stop with an `AbortError` when _shouldAbort_ says so
+
 2.  Compute the style for the node and each sub-node and copy it to
     corresponding clone
+
+    -   the root gets every property; below it, only the properties that
+        differ from the element's default and from its parent's value, and
+        never custom properties (`--*`)
 
     -   and don't forget to recreate pseudo-elements, as they are not
         cloned in any way, of course
 
 3.  Embed web fonts
 
-    -   find all the `@font-face` declarations that might represent web fonts
+    -   find the `@font-face` declarations the browser would select for the
+        family, weight and style of each cloned element
 
-    -   parse file URLs, download corresponding files
+    -   parse file URLs, download corresponding files (each URL only once
+        per page)
 
     -   base64-encode and inline content as `data:` URLs
 
@@ -285,8 +311,10 @@ for you, following steps are taken:
     [tainted](https://developer.mozilla.org/en-US/docs/Web/HTML/CORS_enabled_image) -
     in this case rendering will rather not succeed.  
 
--   at the time of writing, Firefox has a problem with some external stylesheets
-    (see issue #13). In such case, the error will be caught and logged.  
+-   browsers do not let a page read the rules of a stylesheet from another
+    origin that was loaded without CORS. Web fonts declared there cannot be
+    embedded; the error is caught and logged, and the rendering goes on
+    without them.  
 
 ## Authors
 
